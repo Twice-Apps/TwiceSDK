@@ -1,0 +1,325 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a9752b0c8e144801967e6897679604b, type: 3}
+  m_Name: vHierarchy Data
+  m_EditorClassIdentifier: 
+  sceneDatasByGuid:
+    keys:
+    - 19288f5d7be57954f8a2107f87ed965a
+    - 7ef6f3c22e0856f4ebfbded5cbe6b65e
+    - cc0b80ce7479f924fa29c695693d8ae8
+    - 361eea68332b709408fe8391773229a1
+    - 
+    - 4723a3e64b3234444b1393548554ce46
+    - 1fa0af1cfa177214190feceacdb69e68
+    values:
+    - goDatasByGlobalId:
+        keys:
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-1732199422-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-1290184280-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-2013882869-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-1979784308-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-854304424-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-29318912-0
+        - GlobalObjectId_V1-2-19288f5d7be57954f8a2107f87ed965a-1717975775-0
+        values:
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+      goDatasByInstanceId:
+        keys: e297000030940000729a0000049a0000c49000003e890000c297000088b00100d8ac010016b30100a6b2010060a90100dea1010068b00100aada0100ead6010056dd0100e2dc010052d3010094cb01008ada0100c4ee010004eb010070f10100fcf001006ce70100aedf0100a4ee0100da2d02000c2a02007c3002000a30020078260200b01e0200b62d0200d2420200043f02007445020002450200703b0200a8330200ae420200a2d90300a6d503006cdc030002dc0300b6d10300bec903007cd90300c2ee0300c6ea03008cf1030022f10300d6e60300dede03009cee03005a460400524204001c490400b24804006c3e04006c360400324604007a890400508504005a8c0400ec8b0400488104001679040050890400329f0400089b040012a20400a4a1040000970400ce8e0400089f0400eae40400c2e00400c4e7040052e70400b6dc040082d40400c0e4040082fc04005af804005cff0400eafe04004ef404001aec040058fc0400ea580500c2540500c45b0500525b0500b650050082480500c0580500180a060006060600fa0c06008e0c06001a02060000fa0500f2090600f8500600e64c0600da5306006e530600fa480600e0400600d25006001a67060008630600fc690600906906001c5f060002570600f4660600
+        values:
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+        - iColor: 0
+          icon: Light Icon
+        - iColor: 3
+          icon: Folder Icon
+        - iColor: 4
+          icon: Folder Icon
+        - iColor: 6
+          icon: Folder Icon
+        - iColor: 9
+          icon: Folder Icon
+        - iColor: 0
+          icon: Camera Icon
+        - iColor: 2
+          icon: 
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
+    - goDatasByGlobalId:
+        keys: []
+        values: []
+      goDatasByInstanceId:
+        keys: 
+        values: []
