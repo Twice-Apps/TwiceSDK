@@ -4,11 +4,11 @@ using TwiceSDK.VersionCheck;
 namespace TwiceSDK
 {
     /// <summary>
-    /// Single drop-in SDK entry point. Drag the <c>Twice</c> prefab into your first / preloader
-    /// scene — it carries this component plus a child update-prompt Canvas you can restyle per game.
-    /// On start it initializes the SDK and, when a newer required/optional store version exists,
-    /// reveals the prompt; otherwise the prompt stays hidden. Nothing else to wire — analytics +
-    /// remote config already auto-start from the TwiceSettings asset. Singleton; survives scene loads.
+    /// Single drop-in SDK entry point. Drag the <c>TwiceSDK</c> prefab into your first / preloader
+    /// scene — one object, nothing else to wire. On start it calls <see cref="Twice.Initialize"/>
+    /// (version check → analytics → remote config, in order) and, when the version check reports a
+    /// required/optional update, reveals its child update-prompt Canvas (restylable per game).
+    /// Singleton; survives scene loads.
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("Twice/Twice Bootstrap")]
@@ -16,7 +16,7 @@ namespace TwiceSDK
     {
         static TwiceBootstrap _instance;
 
-        [Tooltip("Run the version check on start and reveal the update prompt when an update is needed.")]
+        [Tooltip("Reveal the update prompt when the version check reports an update is needed.")]
         public bool checkForUpdates = true;
 
         [Tooltip("The update prompt (a child of this object). If empty, the first one found in children is used.")]
@@ -30,25 +30,23 @@ namespace TwiceSDK
 
             if (updatePrompt == null) updatePrompt = GetComponentInChildren<TwiceUpdatePrompt>(true);
             if (updatePrompt != null) updatePrompt.Hide(); // stay hidden until the check resolves
+
+            Twice.OnVersionChecked += OnVersionChecked;
         }
 
         void Start()
         {
             if (_instance != this) return;
             Twice.Initialize();
-            if (!checkForUpdates) return;
-
-            Debug.Log("[Twice] Bootstrap: checking app version…");
-            TwiceVersionChecker.Check(OnVersionResult);
         }
 
-        void OnVersionResult(UpdateStatus status)
+        void OnVersionChecked(UpdateStatus status)
         {
-            if (status.UpdateAvailable)
+            if (!checkForUpdates) return;
+            if (status.UpdateAvailable && updatePrompt != null)
             {
                 Debug.Log("[Twice] Update " + status.Action + " — showing prompt.");
-                if (updatePrompt != null) updatePrompt.Show(status);
-                else Debug.LogWarning("[Twice] Update needed but no TwiceUpdatePrompt found under the Twice object.");
+                updatePrompt.Show(status);
             }
             else
             {
@@ -58,6 +56,7 @@ namespace TwiceSDK
 
         void OnDestroy()
         {
+            Twice.OnVersionChecked -= OnVersionChecked;
             if (_instance == this) _instance = null;
         }
     }

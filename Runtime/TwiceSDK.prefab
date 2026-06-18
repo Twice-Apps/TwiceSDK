@@ -290,7 +290,7 @@ GameObject:
   - component: {fileID: 5739754366625824345}
   - component: {fileID: 4986292976761103444}
   m_Layer: 0
-  m_Name: Twice
+  m_Name: TwiceSDK
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -417,7 +417,7 @@ GameObject:
   - component: {fileID: 7165295397554871652}
   - component: {fileID: 7513244201350591222}
   m_Layer: 0
-  m_Name: UpdatePrompt
+  m_Name: VersionChecker
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

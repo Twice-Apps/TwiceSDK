@@ -278,7 +278,9 @@ namespace TwiceSDK.Analytics
             LoadPersistedQueue();
             StartNewSession(logStart: _autoTrackSessions);
             StartCoroutine(FlushLoop());
-            RequestFlush(); // boot'ta beklemeden gönder: session_start + diskten gelen event'ler hemen çıksın
+            // Boot flush is deferred to Twice.Initialize() step 2 so the ordered sequence
+            // (version check → analytics → remote config) holds. Without the bootstrap object,
+            // the periodic FlushLoop still sends shortly after.
         }
 
         // ---- session --------------------------------------------------------

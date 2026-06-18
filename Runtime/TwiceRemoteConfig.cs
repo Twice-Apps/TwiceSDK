@@ -83,7 +83,6 @@ namespace TwiceSDK.RemoteConfig
         string _apiKey;
         string _endpointBaseUrl = "https://www.twiceapps.co/api/v1";
         bool _debug;
-        bool _autoFetch = true;
         bool _fetching;
         int _version;
         bool _loaded;
@@ -102,8 +101,8 @@ namespace TwiceSDK.RemoteConfig
             if (s == null) return; // no asset → wait for a manual TwiceRemoteConfig.Init()/Fetch()
             EnsureExists();
             Instance.ConfigureFromSettings(s);
-            if (Instance._autoFetch && !string.IsNullOrEmpty(Instance._apiKey))
-                Instance.Fetch(null);
+            // Boot fetch is deferred to Twice.Initialize() step 3 (ordered sequence). The cached
+            // config is already loaded in EnsureExists, so values are available immediately offline.
         }
 
         internal static void EnsureExists()
@@ -130,7 +129,6 @@ namespace TwiceSDK.RemoteConfig
             if (!string.IsNullOrEmpty(s.endpointBaseUrl)) _endpointBaseUrl = s.endpointBaseUrl.Trim();
             if (!string.IsNullOrEmpty(s.apiKey)) _apiKey = s.apiKey.Trim();
             _debug = s.debugLogging;
-            _autoFetch = s.autoFetchRemoteConfig;
         }
 
         internal void Configure(string apiKey, string baseUrl)

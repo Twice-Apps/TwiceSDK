@@ -19,10 +19,12 @@ All notable changes to the Twice SDK are documented here. This project adheres t
 - **Remote Config** (`TwiceSDK.RemoteConfig.TwiceRemoteConfig`): pulls `GET {base}/sdk/config`,
   caches it (offline + instant next launch), bumps a `version`, and exposes typed getters
   (`GetBool/Int/Long/Float/Double/String`), `GetRawJson` and `GetJson<T>`, plus `OnUpdated`.
-- **Bootstrap** (`TwiceSDK.TwiceBootstrap`): drag the `Twice` prefab into your first / preloader
-  scene — one object, nothing else to wire. It initializes the SDK, runs the version check, and
-  reveals its child update prompt when a newer required/optional store version exists. Singleton;
-  survives scene loads. (Analytics + remote config already auto-start from the settings asset.)
+- **Bootstrap** (`TwiceSDK.TwiceBootstrap` + `Twice.Initialize()`): drag the `TwiceSDK` prefab into
+  your first / preloader scene — one object, nothing else to wire. `Twice.Initialize()` runs the
+  modules **in order, one after the previous finishes**: 1) version check (→ reveals the child
+  update prompt when needed), 2) analytics (flush session_start), 3) remote config fetch. Singleton;
+  survives scene loads. (Boot-time network calls of analytics/remote config are deferred to this
+  ordered sequence; cached remote config is still available offline immediately.)
 - **Version prompt** (`TwiceSDK.VersionCheck.TwiceUpdatePrompt`): display-only component on a child
   Canvas of the `Twice` prefab — full-screen, input-blocking, and fully restylable per game. Starts
   hidden; `Show()` reveals it and wires the Update button to the store (iOS App ID → `itms-apps://`,
