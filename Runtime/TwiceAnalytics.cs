@@ -237,6 +237,15 @@ namespace TwiceSDK.Analytics
             _maxBatchSize = Mathf.Clamp(s.maxBatchSize, 1, 200);
             _debugLogging = s.debugLogging;
             _environment = s.environment;
+#if UNITY_EDITOR
+            // Editor testing: report a real store platform so this build's version reaches the
+            // Version Checker (events tagged Editor are otherwise ignored there). Sandbox-only.
+            if (s.editorPlatformOverride != EditorPlatform.None)
+            {
+                _platform = s.editorPlatformOverride.ToString();
+                _buildNumber = TwiceVersionChecker.EditorBuildFor(_platform);
+            }
+#endif
             Configure(s.apiKey, null);
         }
 

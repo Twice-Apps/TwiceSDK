@@ -74,11 +74,23 @@ namespace TwiceSDK.VersionCheck
                     onResult?.Invoke(default);
                     return;
                 }
+
+                string platform = StorePlatform();
+                string build = BuildNumber;
+#if UNITY_EDITOR
+                string ov = EditorOverridePlatform();
+                if (ov != null)
+                {
+                    platform = ov;
+                    build = EditorBuildFor(ov);
+                    Debug.Log("[TwiceVersionChecker] Editor platform override → " + platform + " (build " + build + ")");
+                }
+#endif
                 TwiceVersionCheckerRunner.EnsureExists();
                 TwiceVersionCheckerRunner.Instance.Run(
                     apiKey.Trim(),
                     string.IsNullOrEmpty(baseUrl) ? "https://www.twiceapps.co/api/v1" : baseUrl.Trim().TrimEnd('/'),
-                    StorePlatform(), Application.version, BuildNumber, onResult);
+                    platform, Application.version, build, onResult);
             }
             catch (Exception e)
             {
@@ -97,6 +109,28 @@ namespace TwiceSDK.VersionCheck
                 case RuntimePlatform.IPhonePlayer: return "iOS";
                 default: return Application.platform.ToString(); // backend ignores non-store platforms
             }
+        }
+
+        /// <summary>Editor-only platform override from TwiceSettings, or null when off / not editor.</summary>
+        static string EditorOverridePlatform()
+        {
+#if UNITY_EDITOR
+            var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
+            if (s != null && s.editorPlatformOverride != EditorPlatform.None)
+                return s.editorPlatformOverride.ToString(); // "iOS" / "Android"
+#endif
+            return null;
+        }
+
+        /// <summary>Build number for a specific store platform — used by the Editor override so
+        /// analytics + version check report the matching build. Falls back to <see cref="BuildNumber"/>.</summary>
+        public static string EditorBuildFor(string platform)
+        {
+#if UNITY_EDITOR
+            if (platform == "Android") return UnityEditor.PlayerSettings.Android.bundleVersionCode.ToString(CultureInfo.InvariantCulture);
+            if (platform == "iOS") return UnityEditor.PlayerSettings.iOS.buildNumber ?? "";
+#endif
+            return BuildNumber;
         }
 
 #if UNITY_IOS && !UNITY_EDITOR

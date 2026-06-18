@@ -2,6 +2,15 @@ using UnityEngine;
 
 namespace TwiceSDK
 {
+    /// <summary>Editor-only: report this store platform instead of "Editor", so version
+    /// discovery + checking work while testing in Play mode without a device build.</summary>
+    public enum EditorPlatform
+    {
+        None = 0,
+        iOS = 1,
+        Android = 2,
+    }
+
     /// <summary>How the SDK decides whether events are tagged sandbox or production.</summary>
     public enum EnvironmentMode
     {
@@ -49,6 +58,11 @@ namespace TwiceSDK
         [Tooltip("Auto: Editor & Development builds (or TWICE_SANDBOX define) → sandbox, else production. " +
                  "Sandbox/Production force the tag (e.g. set Sandbox in a TestFlight/internal build).")]
         public EnvironmentMode environment = EnvironmentMode.Auto;
+
+        [Tooltip("EDITOR ONLY. While testing in the Editor, report this store platform instead of " +
+                 "'Editor' so the build's version reaches the Version Checker and the update prompt " +
+                 "can be tested without a device. None = normal Editor behavior. Ignored in real builds.")]
+        public EditorPlatform editorPlatformOverride = EditorPlatform.None;
 
         [Header("Debug")]
         [Tooltip("Log SDK activity to the Unity console. Turn off for production builds.")]

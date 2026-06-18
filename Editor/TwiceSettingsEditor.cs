@@ -59,7 +59,14 @@ namespace TwiceSDK.Editor
                     EditorGUILayout.HelpBox("Set the API Key above to fetch remote config.", MessageType.Info);
             });
 
-            Section(ref _env, "Environment", () => Prop("environment"));
+            Section(ref _env, "Environment", () =>
+            {
+                Prop("environment");
+                Prop("editorPlatformOverride", "Editor Platform Override");
+                if (s.editorPlatformOverride != EditorPlatform.None)
+                    EditorGUILayout.HelpBox("Editor only: events + version check report '" + s.editorPlatformOverride +
+                        "' instead of Editor, so this build's version reaches the Version Checker. Ignored in real builds.", MessageType.Info);
+            });
             Section(ref _debug, "Debug", () => Prop("debugLogging"));
 
             serializedObject.ApplyModifiedProperties();
