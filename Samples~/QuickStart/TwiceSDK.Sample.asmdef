@@ -1,12 +1,10 @@
 {
-    "name": "Twice.Analytics.Editor",
-    "rootNamespace": "Twice.Analytics.Editor",
+    "name": "TwiceSDK.Sample",
+    "rootNamespace": "TwiceSDK.Sample",
     "references": [
-        "Twice.Analytics"
+        "TwiceSDK"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

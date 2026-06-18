@@ -8,18 +8,18 @@ no PII — drop-in and privacy-safe (GDPR/KVKK). Requires **Unity 2021.3 LTS+**.
 ## Install (UPM via Git URL)
 Unity → `Window → Package Manager → + → Add package from git URL…`:
 ```
-https://github.com/Twice-Apps/TwiceSDK.git#1.1.0
+https://github.com/Twice-Apps/TwiceSDK.git#2.0.0
 ```
 Or add to `Packages/manifest.json`:
 ```json
-"co.twiceapps.analytics": "https://github.com/Twice-Apps/TwiceSDK.git#1.1.0"
+"co.twiceapps.sdk": "https://github.com/Twice-Apps/TwiceSDK.git#2.0.0"
 ```
-Pin a version tag (`#1.1.0`) for reproducible builds. Bump the tag to update.
+Pin a version tag (`#2.0.0`) for reproducible builds, or omit it for the latest commit.
 
 ## Setup
-1. `Assets → Create → Twice → Analytics Settings`.
-2. Move the asset into a `Resources` folder, keep the name `TwiceAnalyticsSettings`
-   (e.g. `Assets/Resources/TwiceAnalyticsSettings.asset`) so it auto-initialises at boot.
+1. `Assets → Create → Twice → SDK Settings`.
+2. Move the asset into a `Resources` folder, keep the name `TwiceSettings`
+   (e.g. `Assets/Resources/TwiceSettings.asset`) so it auto-initialises at boot.
 3. Paste your game key (`X-App-Key`) into the `apiKey` field
    (Twice admin → **Oyunlar** → your game → API anahtarı).
 
@@ -27,7 +27,7 @@ Pin a version tag (`#1.1.0`) for reproducible builds. Bump the tag to update.
 
 ## Analytics
 ```csharp
-using Twice.Analytics;
+using TwiceSDK.Analytics;
 
 TwiceAnalytics.SetConsent(true);
 TwiceAnalytics.LevelCompleted("1-3", score: 1200, duration: 42.5f);
@@ -42,7 +42,7 @@ Reads a per-game typed key-value store from the backend, caches it (offline + in
 launch), and bumps a `version` so the client only changes when the config does.
 
 ```csharp
-using Twice.Analytics;
+using TwiceSDK.RemoteConfig;
 
 // Auto-fetched at boot (toggle on the settings asset). Read with safe defaults:
 bool   adsOn  = TwiceRemoteConfig.GetBool("ads_enabled", true);
@@ -62,6 +62,11 @@ TwiceRemoteConfig.Fetch(ok => Debug.Log("config v" + TwiceRemoteConfig.Version))
 ```
 Manage keys in Twice admin → **Oyunlar** → your game → **Remote Config**. Types: `string`,
 `int`, `float`, `bool`, `json`.
+
+## Namespaces
+- `TwiceSDK` — shared settings (`TwiceSettings`, `EnvironmentMode`).
+- `TwiceSDK.Analytics` — `TwiceAnalytics`.
+- `TwiceSDK.RemoteConfig` — `TwiceRemoteConfig`.
 
 ## Adapting to a game (bridge pattern)
 This package is **game-agnostic** — it only exposes the `TwiceAnalytics.*` / `TwiceRemoteConfig.*`

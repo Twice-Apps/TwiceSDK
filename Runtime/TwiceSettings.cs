@@ -1,12 +1,7 @@
 using UnityEngine;
 
-namespace Twice.Analytics
+namespace TwiceSDK
 {
-    /// <summary>
-    /// Project-level configuration for the Twice SDK (analytics + remote config).
-    /// Create one via <c>Assets → Create → Twice → Analytics Settings</c> and place it in a
-    /// <c>Resources</c> folder named exactly "TwiceAnalyticsSettings" so it is auto-loaded at boot.
-    /// </summary>
     /// <summary>How the SDK decides whether events are tagged sandbox or production.</summary>
     public enum EnvironmentMode
     {
@@ -18,11 +13,16 @@ namespace Twice.Analytics
         Sandbox = 2,
     }
 
-    [CreateAssetMenu(fileName = "TwiceAnalyticsSettings", menuName = "Twice/Analytics Settings", order = 0)]
-    public class TwiceAnalyticsSettings : ScriptableObject
+    /// <summary>
+    /// Project-level configuration for the Twice SDK (analytics + remote config).
+    /// Create one via <c>Assets → Create → Twice → SDK Settings</c> and place it in a
+    /// <c>Resources</c> folder named exactly "TwiceSettings" so it is auto-loaded at boot.
+    /// </summary>
+    [CreateAssetMenu(fileName = "TwiceSettings", menuName = "Twice/SDK Settings", order = 0)]
+    public class TwiceSettings : ScriptableObject
     {
         /// <summary>Resources path (without extension) the bootstrap looks for.</summary>
-        public const string ResourceName = "TwiceAnalyticsSettings";
+        public const string ResourceName = "TwiceSettings";
 
         [Header("Project")]
         [Tooltip("X-App-Key for this game. Copy it from Twice admin → Oyunlar → your game → 'API anahtarı (X-App-Key)'. One game = one key.")]

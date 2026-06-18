@@ -1,9 +1,7 @@
 {
-    "name": "Twice.Analytics.Sample",
-    "rootNamespace": "Twice.Analytics.Sample",
-    "references": [
-        "Twice.Analytics"
-    ],
+    "name": "TwiceSDK",
+    "rootNamespace": "TwiceSDK",
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

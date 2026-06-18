@@ -5,8 +5,9 @@ using System.Globalization;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using TwiceSDK;
 
-namespace Twice.Analytics
+namespace TwiceSDK.RemoteConfig
 {
     /// <summary>
     /// Remote Config client for the Twice backend (PlayFab Title-Data style:
@@ -37,7 +38,7 @@ namespace Twice.Analytics
             remove { if (TwiceRemoteConfigRunner.Instance != null) TwiceRemoteConfigRunner.Instance.Updated -= value; }
         }
 
-        /// <summary>Optional manual init (skip if a TwiceAnalyticsSettings asset is in Resources).</summary>
+        /// <summary>Optional manual init (skip if a TwiceSettings asset is in Resources).</summary>
         public static void Init(string apiKey = null, string endpointBaseUrl = null) => Guard(() =>
         {
             TwiceRemoteConfigRunner.EnsureExists();
@@ -103,7 +104,7 @@ namespace Twice.Analytics
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void AutoBootstrap()
         {
-            var s = Resources.Load<TwiceAnalyticsSettings>(TwiceAnalyticsSettings.ResourceName);
+            var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
             if (s == null) return; // no asset → wait for a manual TwiceRemoteConfig.Init()/Fetch()
             EnsureExists();
             Instance.ConfigureFromSettings(s);
@@ -132,7 +133,7 @@ namespace Twice.Analytics
             }
         }
 
-        internal void ConfigureFromSettings(TwiceAnalyticsSettings s)
+        internal void ConfigureFromSettings(TwiceSettings s)
         {
             if (!string.IsNullOrEmpty(s.endpointBaseUrl)) _endpointBaseUrl = s.endpointBaseUrl.Trim();
             if (!string.IsNullOrEmpty(s.apiKey)) _apiKey = s.apiKey.Trim();
@@ -153,7 +154,7 @@ namespace Twice.Analytics
             if (_fetching) { cb?.Invoke(false); return; }
             if (string.IsNullOrEmpty(_apiKey))
             {
-                Debug.LogWarning("[TwiceRemoteConfig] No API key set. Paste your X-App-Key into TwiceAnalyticsSettings or call TwiceRemoteConfig.Init(apiKey).");
+                Debug.LogWarning("[TwiceRemoteConfig] No API key set. Paste your X-App-Key into TwiceSettings or call TwiceRemoteConfig.Init(apiKey).");
                 cb?.Invoke(false);
                 return;
             }

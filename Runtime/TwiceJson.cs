@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace Twice.Analytics
+namespace TwiceSDK.Analytics
 {
     /// <summary>
     /// Minimal, dependency-free JSON writer. Supports exactly the value types the

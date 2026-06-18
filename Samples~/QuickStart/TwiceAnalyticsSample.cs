@@ -1,18 +1,19 @@
 using System.Collections.Generic;
 using UnityEngine;
-using Twice.Analytics;
+using TwiceSDK.Analytics;
+using TwiceSDK.RemoteConfig;
 
-namespace Twice.Analytics.Sample
+namespace TwiceSDK.Sample
 {
     /// <summary>
     /// Minimal usage example for analytics + remote config. Drop this on a GameObject,
     /// press Play, and watch the Twice admin dashboard fill up. If you ship a
-    /// TwiceAnalyticsSettings asset in Resources, the SDK auto-inits and the explicit
+    /// TwiceSettings asset in Resources, the SDK auto-inits and the explicit
     /// Init() below is optional.
     /// </summary>
     public class TwiceAnalyticsSample : MonoBehaviour
     {
-        [Tooltip("Leave empty to use the API key from the TwiceAnalyticsSettings asset.")]
+        [Tooltip("Leave empty to use the API key from the TwiceSettings asset.")]
         public string apiKeyOverride = "";
 
         void Start()

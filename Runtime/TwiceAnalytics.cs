@@ -7,8 +7,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using TwiceSDK;
 
-namespace Twice.Analytics
+namespace TwiceSDK.Analytics
 {
     /// <summary>
     /// Drop-in, dependency-free analytics client for the Twice backend.
@@ -190,7 +191,7 @@ namespace Twice.Analytics
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void AutoBootstrap()
         {
-            var settings = Resources.Load<TwiceAnalyticsSettings>(TwiceAnalyticsSettings.ResourceName);
+            var settings = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
             if (settings == null) return; // no asset → wait for a manual TwiceAnalytics.Init()
             EnsureExists();
             Instance.ConfigureFromSettings(settings);
@@ -223,7 +224,7 @@ namespace Twice.Analytics
 
         // ---- configuration --------------------------------------------------
 
-        internal void ConfigureFromSettings(TwiceAnalyticsSettings s)
+        internal void ConfigureFromSettings(TwiceSettings s)
         {
             _endpointBaseUrl = Trim(s.endpointBaseUrl, _endpointBaseUrl);
             _autoTrackSessions = s.autoTrackSessions;
@@ -249,7 +250,7 @@ namespace Twice.Analytics
             _currentDelay = _flushIntervalSeconds;
 
             if (string.IsNullOrEmpty(_apiKey))
-                Debug.LogWarning("[TwiceAnalytics] No API key set. Paste your X-App-Key into TwiceAnalyticsSettings or call TwiceAnalytics.Init(apiKey).");
+                Debug.LogWarning("[TwiceAnalytics] No API key set. Paste your X-App-Key into TwiceSettings or call TwiceAnalytics.Init(apiKey).");
 
             if (!_configured)
             {

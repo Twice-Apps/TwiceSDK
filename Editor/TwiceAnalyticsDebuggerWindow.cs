@@ -2,8 +2,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using UnityEditor;
 using UnityEngine;
+using TwiceSDK.Analytics;
 
-namespace Twice.Analytics.Editor
+namespace TwiceSDK.Editor
 {
     /// <summary>
     /// Editor-only test/debug console for the Twice analytics SDK.
