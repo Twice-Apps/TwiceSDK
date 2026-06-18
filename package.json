@@ -27,7 +27,7 @@
     },
     {
       "displayName": "Examples",
-      "description": "Loading-screen demo: a LoadingScreen prefab whose InfoText lists each init step via Twice.OnProgress (Version checked → Analytics → Remote config → Ready).",
+      "description": "Demo scene + LoadingScreen prefab: the InfoText lists each init step via Twice.OnProgress (Version checked → Analytics → Remote config → Ready), plus a remote-config tester.",
       "path": "Samples~/Examples"
     }
   ]
