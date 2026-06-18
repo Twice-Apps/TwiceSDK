@@ -19,12 +19,16 @@ All notable changes to the Twice SDK are documented here. This project adheres t
 - **Remote Config** (`TwiceSDK.RemoteConfig.TwiceRemoteConfig`): pulls `GET {base}/sdk/config`,
   caches it (offline + instant next launch), bumps a `version`, and exposes typed getters
   (`GetBool/Int/Long/Float/Double/String`), `GetRawJson` and `GetJson<T>`, plus `OnUpdated`.
-- **Version prompt** (`TwiceSDK.VersionCheck.TwiceUpdatePrompt`): drop the `VersionChecker` prefab
-  (full-screen blocking Canvas: black tint + "Update Required" + Update button) into the first scene.
-  It bootstraps the SDK, lets analytics report this build's version, runs the version check, then
-  reveals the prompt when an update is needed or destroys itself otherwise. The Update button opens
-  the store link built on-device from the ids the backend returns (iOS App ID → `itms-apps://`,
-  Android bundle id → `market://`). Singleton + survives scene loads. Verbose debug logs.
+- **Bootstrap** (`TwiceSDK.TwiceBootstrap`): drag the `Twice` prefab into your first / preloader
+  scene — one object, nothing else to wire. It initializes the SDK, runs the version check, and
+  reveals its child update prompt when a newer required/optional store version exists. Singleton;
+  survives scene loads. (Analytics + remote config already auto-start from the settings asset.)
+- **Version prompt** (`TwiceSDK.VersionCheck.TwiceUpdatePrompt`): display-only component on a child
+  Canvas of the `Twice` prefab — full-screen, input-blocking, and fully restylable per game. Starts
+  hidden; `Show()` reveals it and wires the Update button to the store (iOS App ID → `itms-apps://`,
+  Android bundle id → `market://`). Only an Update button is required in the prefab.
+- **Editor platform override** (`TwiceSettings`): Editor-only setting to report iOS/Android instead of
+  "Editor", so version discovery + the update prompt can be tested in Play mode without a device build.
 - **`TwiceSDK.Twice`** facade with `Twice.Initialize()` — optional explicit SDK entry point for future
   module wiring.
 - **Settings** (`TwiceSDK.TwiceSettings`) ScriptableObject (`Create → Twice → SDK Settings`),
