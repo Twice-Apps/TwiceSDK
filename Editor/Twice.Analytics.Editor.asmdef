@@ -1,0 +1,18 @@
+{
+    "name": "Twice.Analytics.Editor",
+    "rootNamespace": "Twice.Analytics.Editor",
+    "references": [
+        "Twice.Analytics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
