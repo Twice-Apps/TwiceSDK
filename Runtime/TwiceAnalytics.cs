@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using Newtonsoft.Json;
 using TwiceSDK;
 
 namespace TwiceSDK.Analytics
@@ -352,7 +353,7 @@ namespace TwiceSDK.Analytics
                 if (parameters != null)
                     foreach (var kv in parameters) merged[kv.Key] = kv.Value;
             }
-            string json = merged != null && merged.Count > 0 ? TwiceJson.SerializeObject(merged) : "{}";
+            string json = merged != null && merged.Count > 0 ? JsonConvert.SerializeObject(merged) : "{}";
 
             var ev = new QueuedEvent
             {
@@ -521,18 +522,18 @@ namespace TwiceSDK.Analytics
         {
             var sb = new StringBuilder(256 + batch.Count * 64);
             sb.Append('{');
-            sb.Append("\"session_id\":"); TwiceJson.AppendString(sb, Clamp(batch[0].sessionId, 80)); sb.Append(',');
-            sb.Append("\"user_id\":"); TwiceJson.AppendString(sb, Clamp(_userId, 80)); sb.Append(',');
-            sb.Append("\"platform\":"); TwiceJson.AppendString(sb, _platform); sb.Append(',');
-            sb.Append("\"app_version\":"); TwiceJson.AppendString(sb, _appVersion); sb.Append(',');
-            sb.Append("\"env\":"); TwiceJson.AppendString(sb, IsSandbox ? "sandbox" : "production"); sb.Append(',');
+            sb.Append("\"session_id\":").Append(JsonConvert.ToString(Clamp(batch[0].sessionId, 80))).Append(',');
+            sb.Append("\"user_id\":").Append(JsonConvert.ToString(Clamp(_userId, 80))).Append(',');
+            sb.Append("\"platform\":").Append(JsonConvert.ToString(_platform)).Append(',');
+            sb.Append("\"app_version\":").Append(JsonConvert.ToString(_appVersion)).Append(',');
+            sb.Append("\"env\":").Append(JsonConvert.ToString(IsSandbox ? "sandbox" : "production")).Append(',');
             sb.Append("\"events\":[");
             for (int i = 0; i < batch.Count; i++)
             {
                 if (i > 0) sb.Append(',');
                 var e = batch[i];
-                sb.Append("{\"event_id\":"); TwiceJson.AppendString(sb, e.eventId);
-                sb.Append(",\"name\":"); TwiceJson.AppendString(sb, e.name);
+                sb.Append("{\"event_id\":").Append(JsonConvert.ToString(e.eventId));
+                sb.Append(",\"name\":").Append(JsonConvert.ToString(e.name));
                 sb.Append(",\"ts\":").Append(e.ts.ToString(CultureInfo.InvariantCulture));
                 sb.Append(",\"params\":").Append(string.IsNullOrEmpty(e.paramsJson) ? "{}" : e.paramsJson);
                 sb.Append('}');

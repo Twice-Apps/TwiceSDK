@@ -1,9 +1,10 @@
 # Twice SDK — Unity
 
-Lightweight, **dependency-free** SDK for the Twice backend: **analytics** (events, sessions,
+Lightweight SDK for the Twice backend: **analytics** (events, sessions,
 revenue) + **remote config** (typed key-value, PlayFab Title-Data style).
-Works on **iOS, Android, WebGL, Windows, macOS and the Unity Editor**. No Newtonsoft, no threads,
-no PII — drop-in and privacy-safe (GDPR/KVKK). Requires **Unity 2021.3 LTS+**.
+Works on **iOS, Android, WebGL, Windows, macOS and the Unity Editor**. No threads,
+no PII — drop-in and privacy-safe (GDPR/KVKK). Requires **Unity 2021.3 LTS+** and
+**Newtonsoft.Json** (`com.unity.nuget.newtonsoft-json`, installed automatically as a package dependency).
 
 ## Install (UPM via Git URL)
 Unity → `Window → Package Manager → + → Add package from git URL…`:
@@ -51,8 +52,8 @@ int    coins  = TwiceRemoteConfig.GetInt("coins_per_level", 50);
 float  price  = TwiceRemoteConfig.GetFloat("hint_price", 250f);
 string minVer = TwiceRemoteConfig.GetString("min_version", "1.0.0");
 
-// Nested json value → your [Serializable] class (Unity JsonUtility):
-[System.Serializable] public class GameSettings { public int adFreeUntilLevel; public int adReward; }
+// Nested json value → your POCO / class (parsed with Newtonsoft):
+public class GameSettings { public int adFreeUntilLevel; public int adReward; }
 GameSettings gs = TwiceRemoteConfig.GetJson<GameSettings>("GameSettings");
 
 // Re-apply when a fresh config arrives:

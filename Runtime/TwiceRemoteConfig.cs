@@ -1,10 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using TwiceSDK;
 
 namespace TwiceSDK.RemoteConfig
@@ -13,7 +13,7 @@ namespace TwiceSDK.RemoteConfig
     /// Remote Config client for the Twice backend (PlayFab Title-Data style:
     /// a per-game typed key-value store). Pulls <c>GET {base}/sdk/config</c>,
     /// caches the result (offline + instant next launch) and exposes typed getters.
-    /// Dependency-free, WebGL-safe, never throws into game code.
+    /// JSON parsing is done with Newtonsoft.Json. Never throws into game code.
     ///
     /// Usage:
     /// <code>
@@ -31,7 +31,7 @@ namespace TwiceSDK.RemoteConfig
         /// <summary>True once a config (live or cached) has been loaded.</summary>
         public static bool IsReady => TwiceRemoteConfigRunner.Instance != null && TwiceRemoteConfigRunner.Instance.Loaded;
 
-        /// <summary>Fired after a successful fetch that changed the config. Subscribe to re-apply values.</summary>
+        /// <summary>Fired after a successful fetch. Subscribe to re-apply values.</summary>
         public static event Action OnUpdated
         {
             add { TwiceRemoteConfigRunner.EnsureExists(); TwiceRemoteConfigRunner.Instance.Updated += value; }
@@ -55,24 +55,18 @@ namespace TwiceSDK.RemoteConfig
         public static bool HasKey(string key) => Inst()?.Has(key) ?? false;
         public static string[] Keys => Inst()?.Keys ?? Array.Empty<string>();
 
-        public static string GetString(string key, string def = "") => Inst()?.GetString(key, def) ?? def;
-        public static bool GetBool(string key, bool def = false) => Inst()?.GetBool(key, def) ?? def;
-        public static int GetInt(string key, int def = 0) => Inst()?.GetInt(key, def) ?? def;
-        public static long GetLong(string key, long def = 0L) => Inst()?.GetLong(key, def) ?? def;
-        public static float GetFloat(string key, float def = 0f) => Inst()?.GetFloat(key, def) ?? def;
-        public static double GetDouble(string key, double def = 0d) => Inst()?.GetDouble(key, def) ?? def;
+        public static string GetString(string key, string def = "") => Inst()?.Get(key, def) ?? def;
+        public static bool GetBool(string key, bool def = false) => Inst() != null ? Inst().Get(key, def) : def;
+        public static int GetInt(string key, int def = 0) => Inst() != null ? Inst().Get(key, def) : def;
+        public static long GetLong(string key, long def = 0L) => Inst() != null ? Inst().Get(key, def) : def;
+        public static float GetFloat(string key, float def = 0f) => Inst() != null ? Inst().Get(key, def) : def;
+        public static double GetDouble(string key, double def = 0d) => Inst() != null ? Inst().Get(key, def) : def;
 
         /// <summary>Raw JSON text of a key's value (object/array/scalar), or null if absent.</summary>
         public static string GetRawJson(string key) => Inst()?.GetRaw(key);
 
-        /// <summary>Deserialize a json-typed key into <typeparamref name="T"/> via Unity's JsonUtility (use a [Serializable] class).</summary>
-        public static T GetJson<T>(string key)
-        {
-            string raw = GetRawJson(key);
-            if (string.IsNullOrEmpty(raw)) return default;
-            try { return JsonUtility.FromJson<T>(raw); }
-            catch (Exception e) { Debug.LogWarning("[TwiceRemoteConfig] GetJson<" + typeof(T).Name + ">(\"" + key + "\") failed: " + e.Message); return default; }
-        }
+        /// <summary>Deserialize a json-typed key into <typeparamref name="T"/> via Newtonsoft (POCO / [Serializable]).</summary>
+        public static T GetJson<T>(string key) => Inst() != null ? Inst().GetJson<T>(key) : default;
 
         static TwiceRemoteConfigRunner Inst() => TwiceRemoteConfigRunner.Instance;
         static void Guard(Action a) { try { a(); } catch (Exception e) { Debug.LogWarning("[TwiceRemoteConfig] swallowed: " + e); } }
@@ -83,7 +77,7 @@ namespace TwiceSDK.RemoteConfig
     {
         internal static TwiceRemoteConfigRunner Instance { get; private set; }
 
-        const string CacheKey = "twice_rc_config";   // raw config object json
+        const string CacheKey = "twice_rc_config";    // raw config object json
         const string VersionKey = "twice_rc_version"; // cached version
 
         string _apiKey;
@@ -93,7 +87,7 @@ namespace TwiceSDK.RemoteConfig
         bool _fetching;
         int _version;
         bool _loaded;
-        readonly Dictionary<string, string> _raw = new Dictionary<string, string>(); // key -> raw JSON value text
+        JObject _config; // the "config" object from the backend, or null
 
         internal int Version => _version;
         internal bool Loaded => _loaded;
@@ -126,11 +120,9 @@ namespace TwiceSDK.RemoteConfig
         {
             _version = PlayerPrefs.GetInt(VersionKey, 0);
             string raw = PlayerPrefs.GetString(CacheKey, "");
-            if (!string.IsNullOrEmpty(raw))
-            {
-                ParseObjectRaw(raw, _raw);
-                _loaded = true;
-            }
+            if (string.IsNullOrEmpty(raw)) return;
+            try { _config = JObject.Parse(raw); _loaded = true; }
+            catch (Exception e) { Log("cache parse failed: " + e.Message); }
         }
 
         internal void ConfigureFromSettings(TwiceSettings s)
@@ -176,7 +168,7 @@ namespace TwiceSDK.RemoteConfig
                 if (ok)
                 {
                     try { ApplyResponse(req.downloadHandler.text); }
-                    catch (Exception e) { Log("parse failed: " + e.Message); ok = false; }
+                    catch (Exception e) { Log("apply failed: " + e.Message); ok = false; }
                 }
                 else
                 {
@@ -190,214 +182,63 @@ namespace TwiceSDK.RemoteConfig
         void ApplyResponse(string body)
         {
             // body: {"ok":true,"version":N,"config":{...}}
-            var top = new Dictionary<string, string>();
-            ParseObjectRaw(body, top);
+            var root = JObject.Parse(body);
 
             int version = _version;
-            if (top.TryGetValue("version", out var vRaw))
-                int.TryParse(vRaw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out version);
+            var vTok = root["version"];
+            if (vTok != null) { try { version = vTok.ToObject<int>(); } catch { } }
 
-            string configRaw = top.TryGetValue("config", out var cRaw) ? cRaw : "{}";
-
-            var map = new Dictionary<string, string>();
-            ParseObjectRaw(configRaw, map);
-
-            _raw.Clear();
-            foreach (var kv in map) _raw[kv.Key] = kv.Value;
+            _config = root["config"] as JObject ?? new JObject();
             _version = version;
             _loaded = true;
 
-            PlayerPrefs.SetString(CacheKey, configRaw);
+            PlayerPrefs.SetString(CacheKey, _config.ToString(Formatting.None));
             PlayerPrefs.SetInt(VersionKey, version);
             PlayerPrefs.Save();
 
-            Log("updated to v" + version + " (" + _raw.Count + " keys).");
+            Log("updated to v" + version + " (" + _config.Count + " keys).");
             try { Updated?.Invoke(); }
             catch (Exception e) { Debug.LogWarning("[TwiceRemoteConfig] OnUpdated handler threw: " + e); }
         }
 
         // ---- typed getters --------------------------------------------------
 
-        internal bool Has(string key) => _raw.ContainsKey(key);
+        internal bool Has(string key) => _config != null && _config[key] != null;
 
         internal string[] Keys
         {
-            get { var arr = new string[_raw.Count]; _raw.Keys.CopyTo(arr, 0); return arr; }
-        }
-
-        internal string GetRaw(string key) => _raw.TryGetValue(key, out var v) ? v : null;
-
-        internal string GetString(string key, string def)
-        {
-            if (!_raw.TryGetValue(key, out var raw)) return def;
-            raw = raw.Trim();
-            if (raw.Length >= 2 && raw[0] == '"')
+            get
             {
-                int i = 0;
-                return ReadString(raw, ref i);
-            }
-            return raw; // number/bool stored without quotes
-        }
-
-        internal bool GetBool(string key, bool def)
-        {
-            if (!_raw.TryGetValue(key, out var raw)) return def;
-            raw = raw.Trim();
-            if (raw == "true") return true;
-            if (raw == "false") return false;
-            return def;
-        }
-
-        internal double GetDouble(string key, double def)
-        {
-            if (!_raw.TryGetValue(key, out var raw)) return def;
-            return double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : def;
-        }
-
-        internal int GetInt(string key, int def)
-        {
-            if (!_raw.TryGetValue(key, out var raw)) return def;
-            string t = raw.Trim();
-            if (int.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)) return i;
-            if (double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) return (int)d;
-            return def;
-        }
-
-        internal long GetLong(string key, long def)
-        {
-            if (!_raw.TryGetValue(key, out var raw)) return def;
-            string t = raw.Trim();
-            if (long.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l)) return l;
-            if (double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) return (long)d;
-            return def;
-        }
-
-        internal float GetFloat(string key, float def)
-        {
-            double d = GetDouble(key, double.NaN);
-            return double.IsNaN(d) ? def : (float)d;
-        }
-
-        // ---- minimal JSON scanner (dependency-free) -------------------------
-        // Parses a flat JSON object into key -> raw value text (value left verbatim:
-        // strings keep their quotes, objects/arrays keep their braces). Nested
-        // structures are preserved as raw text for GetRawJson / GetJson<T>.
-
-        static void ParseObjectRaw(string s, Dictionary<string, string> map)
-        {
-            if (string.IsNullOrEmpty(s)) return;
-            int i = 0;
-            SkipWs(s, ref i);
-            if (i >= s.Length || s[i] != '{') return;
-            i++; // {
-            while (i < s.Length)
-            {
-                SkipWs(s, ref i);
-                if (i < s.Length && s[i] == '}') { i++; break; }
-                if (i >= s.Length || s[i] != '"') break;
-                string key = ReadString(s, ref i);
-                SkipWs(s, ref i);
-                if (i >= s.Length || s[i] != ':') break;
-                i++; // :
-                SkipWs(s, ref i);
-                int start = i;
-                SkipValue(s, ref i);
-                map[key] = s.Substring(start, i - start).Trim();
-                SkipWs(s, ref i);
-                if (i < s.Length && s[i] == ',') { i++; continue; }
-                if (i < s.Length && s[i] == '}') { i++; break; }
-                break;
+                if (_config == null) return Array.Empty<string>();
+                var list = new List<string>();
+                foreach (var p in _config.Properties()) list.Add(p.Name);
+                return list.ToArray();
             }
         }
 
-        static void SkipWs(string s, ref int i)
+        internal string GetRaw(string key)
         {
-            while (i < s.Length)
-            {
-                char c = s[i];
-                if (c == ' ' || c == '\t' || c == '\n' || c == '\r') i++;
-                else break;
-            }
+            var t = _config?[key];
+            return t == null ? null : t.ToString(Formatting.None);
         }
 
-        static void SkipValue(string s, ref int i)
+        internal T GetJson<T>(string key)
         {
-            SkipWs(s, ref i);
-            if (i >= s.Length) return;
-            char c = s[i];
-            if (c == '"') { SkipString(s, ref i); }
-            else if (c == '{' || c == '[') { SkipContainer(s, ref i); }
-            else
-            {
-                while (i < s.Length && s[i] != ',' && s[i] != '}' && s[i] != ']') i++;
-            }
+            var t = _config?[key];
+            if (t == null || t.Type == JTokenType.Null) return default;
+            try { return t.ToObject<T>(); }
+            catch (Exception e) { Log("GetJson<" + typeof(T).Name + ">(\"" + key + "\") failed: " + e.Message); return default; }
         }
 
-        static void SkipString(string s, ref int i)
+        internal T Get<T>(string key, T def)
         {
-            i++; // opening quote
-            while (i < s.Length)
-            {
-                char c = s[i++];
-                if (c == '\\') { if (i < s.Length) i++; }
-                else if (c == '"') break;
-            }
+            var t = _config?[key];
+            if (t == null || t.Type == JTokenType.Null) return def;
+            try { return t.ToObject<T>(); }
+            catch { return def; }
         }
 
-        static void SkipContainer(string s, ref int i)
-        {
-            char open = s[i];
-            char close = open == '{' ? '}' : ']';
-            int depth = 0;
-            while (i < s.Length)
-            {
-                char c = s[i];
-                if (c == '"') { SkipString(s, ref i); continue; }
-                if (c == open) { depth++; i++; continue; }
-                if (c == close) { depth--; i++; if (depth == 0) return; continue; }
-                i++;
-            }
-        }
-
-        static string ReadString(string s, ref int i)
-        {
-            var sb = new StringBuilder();
-            i++; // opening quote
-            while (i < s.Length)
-            {
-                char c = s[i++];
-                if (c == '\\')
-                {
-                    if (i >= s.Length) break;
-                    char e = s[i++];
-                    switch (e)
-                    {
-                        case '"': sb.Append('"'); break;
-                        case '\\': sb.Append('\\'); break;
-                        case '/': sb.Append('/'); break;
-                        case 'b': sb.Append('\b'); break;
-                        case 'f': sb.Append('\f'); break;
-                        case 'n': sb.Append('\n'); break;
-                        case 'r': sb.Append('\r'); break;
-                        case 't': sb.Append('\t'); break;
-                        case 'u':
-                            if (i + 4 <= s.Length)
-                            {
-                                if (int.TryParse(s.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var code))
-                                    sb.Append((char)code);
-                                i += 4;
-                            }
-                            break;
-                        default: sb.Append(e); break;
-                    }
-                }
-                else if (c == '"') break;
-                else sb.Append(c);
-            }
-            return sb.ToString();
-        }
-
-        // ---- lifecycle / log ------------------------------------------------
+        // ---- log ------------------------------------------------------------
 
         void OnDestroy() { if (Instance == this) Instance = null; }
 

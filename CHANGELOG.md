@@ -16,5 +16,5 @@ All notable changes to the Twice SDK are documented here. This project adheres t
 - **Settings** (`TwiceSDK.TwiceSettings`) ScriptableObject (`Create → Twice → SDK Settings`),
   auto-loaded from `Resources/TwiceSettings`. Editor auto-creates an empty one on import
   (paste your X-App-Key in the Inspector).
-- Dependency-free JSON writer + scanner. Editor debugger window (`Twice → Analytics Debugger`).
-  Quick Start sample.
+- JSON handled by Newtonsoft.Json (`com.unity.nuget.newtonsoft-json`, auto-installed as a
+  package dependency). Editor debugger window (`Twice → Analytics Debugger`). Quick Start sample.

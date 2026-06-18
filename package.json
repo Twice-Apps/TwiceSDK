@@ -4,6 +4,9 @@
   "displayName": "Twice SDK",
   "description": "Lightweight, dependency-free SDK for the Twice backend: analytics (events, sessions, revenue) + remote config (typed key-value, PlayFab Title-Data style). Drop-in, privacy-safe, works on iOS/Android/WebGL/Windows/macOS/Editor.",
   "unity": "2021.3",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
   "author": {
     "name": "Twice Apps",
     "email": "info@twiceapps.co",
