@@ -19,8 +19,8 @@ namespace TwiceSDK
         [Tooltip("Reveal the update prompt when the version check reports an update is needed.")]
         public bool checkForUpdates = true;
 
-        [Tooltip("The update prompt (a child of this object). If empty, the first one found in children is used.")]
-        public TwiceUpdatePrompt updatePrompt;
+        // Auto-resolved from the child VersionChecker Canvas — no wiring needed.
+        TwiceUpdatePrompt _prompt;
 
         void Awake()
         {
@@ -28,8 +28,8 @@ namespace TwiceSDK
             _instance = this;
             DontDestroyOnLoad(gameObject);
 
-            if (updatePrompt == null) updatePrompt = GetComponentInChildren<TwiceUpdatePrompt>(true);
-            if (updatePrompt != null) updatePrompt.Hide(); // stay hidden until the check resolves
+            _prompt = GetComponentInChildren<TwiceUpdatePrompt>(true);
+            if (_prompt != null) _prompt.Hide(); // stay hidden until the check resolves
 
             Twice.OnVersionChecked += OnVersionChecked;
         }
@@ -43,10 +43,10 @@ namespace TwiceSDK
         void OnVersionChecked(UpdateStatus status)
         {
             if (!checkForUpdates) return;
-            if (status.UpdateAvailable && updatePrompt != null)
+            if (status.UpdateAvailable && _prompt != null)
             {
                 Debug.Log("[Twice] Update " + status.Action + " — showing prompt.");
-                updatePrompt.Show(status);
+                _prompt.Show(status);
             }
             else
             {
