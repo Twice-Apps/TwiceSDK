@@ -12,11 +12,13 @@ namespace TwiceSDK.VersionCheck
     /// <summary>What the backend decided for the running build's version.</summary>
     public enum UpdateAction { None, Optional, Forced }
 
-    /// <summary>Result of a version check. The prompt UI/text is the game's responsibility.</summary>
+    /// <summary>Result of a version check. The prompt UI/text — and the store URL it opens — are
+    /// built on the client from these ids (the backend only returns the decision + ids).</summary>
     public struct UpdateStatus
     {
         public UpdateAction Action;
-        public string StoreUrl;
+        public string AppId;    // iOS App Store numeric id (for itms-apps://…/id{AppId})
+        public string BundleId; // platform bundle id (for market://details?id={BundleId})
         public bool UpdateAvailable => Action != UpdateAction.None;
         public bool IsForced => Action == UpdateAction.Forced;
         public bool IsOptional => Action == UpdateAction.Optional;
@@ -163,7 +165,7 @@ namespace TwiceSDK.VersionCheck
                        + "&version=" + UnityWebRequest.EscapeURL(version)
                        + "&build=" + UnityWebRequest.EscapeURL(build);
 
-            var status = new UpdateStatus { Action = UpdateAction.None, StoreUrl = "" };
+            var status = new UpdateStatus { Action = UpdateAction.None, AppId = "", BundleId = "" };
             using (var req = UnityWebRequest.Get(url))
             {
                 req.SetRequestHeader("X-App-Key", apiKey);
@@ -179,7 +181,8 @@ namespace TwiceSDK.VersionCheck
                         status.Action = action == "forced" ? UpdateAction.Forced
                                       : action == "optional" ? UpdateAction.Optional
                                       : UpdateAction.None;
-                        status.StoreUrl = (string)j["store_url"] ?? "";
+                        status.AppId    = (string)j["app_id"] ?? "";
+                        status.BundleId = (string)j["bundle_id"] ?? "";
                     }
                     catch (Exception e) { Debug.LogWarning("[TwiceVersionChecker] parse failed: " + e); }
                 }

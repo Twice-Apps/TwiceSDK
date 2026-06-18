@@ -1,30 +1,40 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TwiceSDK;
 
 namespace TwiceSDK.VersionCheck
 {
     /// <summary>
-    /// Controller for the VersionChecker prefab (a full-screen, input-blocking Canvas). On Start it
-    /// asks the backend whether the running build is behind the configured version; if an update is
-    /// needed it reveals the prompt and wires the Update button to the store, otherwise it destroys
-    /// itself. The store URL — including the iOS App Store app id — comes from the Twice web panel
-    /// via the version-check response, so nothing platform-specific is baked into the build.
+    /// Bootstrap + controller for the VersionChecker prefab (a full-screen, input-blocking Canvas).
+    /// Drop the prefab into your first scene. On play it initializes the SDK, lets analytics fire
+    /// <c>session_start</c> (which reports this build's version → admin panel), runs the version
+    /// check, and:
+    ///   • update needed  → reveals the prompt and wires the Update button to the store,
+    ///   • up to date     → destroys itself.
+    /// The store deep link is built here from the ids the backend returns (iOS App ID → itms-apps,
+    /// Android bundle id → market). Survives scene loads (singleton + DontDestroyOnLoad).
     ///
-    /// UI children are found by name (Blocker / a Button in the hierarchy), so the prefab needs no
-    /// manual reference wiring.
+    /// UI children are found by name (Blocker / a Button), so the prefab needs no manual wiring.
     /// </summary>
     [DisallowMultipleComponent]
     public class TwiceUpdatePrompt : MonoBehaviour
     {
+        static TwiceUpdatePrompt _instance;
+
         [Tooltip("Also show the prompt for optional (non-forced) updates. If false, optional updates only log and the object is destroyed.")]
         public bool showForOptional = true;
 
         GameObject _content; // the "Blocker" tint subtree
         Button _button;
-        string _storeUrl;
+        string _appId;
+        string _bundleId;
 
         void Awake()
         {
+            if (_instance != null && _instance != this) { Destroy(gameObject); return; }
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+
             var blocker = transform.Find("Blocker");
             _content = blocker != null ? blocker.gameObject : null;
             _button = GetComponentInChildren<Button>(true);
@@ -33,13 +43,16 @@ namespace TwiceSDK.VersionCheck
 
         void Start()
         {
+            if (_instance != this) return; // duplicate already destroyed in Awake
+            Twice.Initialize();
             Debug.Log("[TwiceUpdatePrompt] Checking app version…");
             TwiceVersionChecker.Check(OnResult);
         }
 
         void OnResult(UpdateStatus status)
         {
-            _storeUrl = status.StoreUrl;
+            _appId = status.AppId;
+            _bundleId = status.BundleId;
 
             bool show = status.IsForced || (status.IsOptional && showForOptional);
             if (!show)
@@ -49,7 +62,7 @@ namespace TwiceSDK.VersionCheck
                 return;
             }
 
-            Debug.Log("[TwiceUpdatePrompt] Update " + status.Action + " — showing prompt. store_url='" + _storeUrl + "'");
+            Debug.Log("[TwiceUpdatePrompt] Update " + status.Action + " — showing prompt. appId='" + _appId + "' bundleId='" + _bundleId + "'");
             if (_button != null)
             {
                 _button.onClick.RemoveListener(OpenStore);
@@ -58,21 +71,29 @@ namespace TwiceSDK.VersionCheck
             if (_content != null) _content.SetActive(true);
         }
 
-        /// <summary>Open the store page. Uses the panel-provided URL; falls back to the platform store.</summary>
+        /// <summary>Open the platform store page (built from the backend-provided ids).</summary>
         public void OpenStore()
         {
-            string url = _storeUrl;
-            if (string.IsNullOrEmpty(url))
-            {
-#if UNITY_ANDROID
-                url = "market://details?id=" + Application.identifier; // Play uses the package name
-#elif UNITY_IOS
-                // Weak fallback — the numeric App Store id must come from the panel's iOS store URL.
-                url = "itms-apps://itunes.apple.com/app/" + Application.identifier;
-#endif
-            }
+            string url = BuildStoreUrl();
             Debug.Log("[TwiceUpdatePrompt] Opening store: " + url);
             if (!string.IsNullOrEmpty(url)) Application.OpenURL(url);
+        }
+
+        string BuildStoreUrl()
+        {
+#if UNITY_IOS && !UNITY_EDITOR
+            // App Store app, opened directly via the numeric app id.
+            return string.IsNullOrEmpty(_appId) ? "" : ("itms-apps://apps.apple.com/app/id" + _appId);
+#else
+            // Android (and Editor for quick testing): Play Store via package name.
+            string pkg = string.IsNullOrEmpty(_bundleId) ? Application.identifier : _bundleId;
+            return string.IsNullOrEmpty(pkg) ? "" : ("market://details?id=" + pkg);
+#endif
+        }
+
+        void OnDestroy()
+        {
+            if (_instance == this) _instance = null;
         }
     }
 }

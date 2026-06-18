@@ -21,8 +21,10 @@ All notable changes to the Twice SDK are documented here. This project adheres t
   (`GetBool/Int/Long/Float/Double/String`), `GetRawJson` and `GetJson<T>`, plus `OnUpdated`.
 - **Version prompt** (`TwiceSDK.VersionCheck.TwiceUpdatePrompt`): drop the `VersionChecker` prefab
   (full-screen blocking Canvas: black tint + "Update Required" + Update button) into the first scene.
-  On start it runs the version check, reveals the prompt when an update is needed (Update button →
-  store URL from the panel, incl. iOS app id) or destroys itself otherwise. Verbose debug logs.
+  It bootstraps the SDK, lets analytics report this build's version, runs the version check, then
+  reveals the prompt when an update is needed or destroys itself otherwise. The Update button opens
+  the store link built on-device from the ids the backend returns (iOS App ID → `itms-apps://`,
+  Android bundle id → `market://`). Singleton + survives scene loads. Verbose debug logs.
 - **`TwiceSDK.Twice`** facade with `Twice.Initialize()` — optional explicit SDK entry point for future
   module wiring.
 - **Settings** (`TwiceSDK.TwiceSettings`) ScriptableObject (`Create → Twice → SDK Settings`),
