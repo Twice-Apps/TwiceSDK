@@ -81,11 +81,32 @@ namespace TwiceSDK.Analytics
         public static void AdWatched(string placement, IDictionary<string, object> extra = null) =>
             LogEvent("ad_watched", With(extra, "placement", placement));
 
+        /// <summary>
+        /// Impression-level ad revenue from a mediation callback (AppLovin MAX,
+        /// AdMob, LevelPlay…). <paramref name="revenue"/> is in USD — those SDKs
+        /// already report USD. <paramref name="network"/> is the paying ad network;
+        /// <paramref name="placement"/> and <paramref name="adFormat"/>
+        /// ("rewarded" / "interstitial" / "banner") are optional but power the
+        /// network/placement breakdowns in the dashboard.
+        /// </summary>
+        public static void AdRevenue(double revenue, string network, string placement = null,
+                                     string adFormat = null, IDictionary<string, object> extra = null)
+        {
+            var p = With(extra, ("revenue", revenue), ("network", string.IsNullOrEmpty(network) ? "unknown" : network));
+            if (!string.IsNullOrEmpty(placement)) p["placement"] = placement;
+            if (!string.IsNullOrEmpty(adFormat)) p["ad_format"] = adFormat;
+            LogEvent("ad_revenue", p);
+        }
+
         public static void RewardClaimed(string reward, IDictionary<string, object> extra = null) =>
             LogEvent("reward_claimed", With(extra, "reward", reward));
 
         /// <summary>Request an immediate (asynchronous) flush of the queued events.</summary>
         public static void Flush() => Guard(() => TwiceAnalyticsRunner.Instance?.RequestFlush());
+
+        /// <summary>The persistent anonymous user id (the same id sent with every event,
+        /// used to attribute leaderboard scores and purchases). "" before initialization.</summary>
+        public static string UserId => GetDebugInfo().userId ?? "";
 
         // ---- debug / tooling ------------------------------------------------
 
