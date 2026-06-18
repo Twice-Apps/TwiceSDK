@@ -8,13 +8,14 @@ no PII — drop-in and privacy-safe (GDPR/KVKK). Requires **Unity 2021.3 LTS+**.
 ## Install (UPM via Git URL)
 Unity → `Window → Package Manager → + → Add package from git URL…`:
 ```
-https://github.com/Twice-Apps/TwiceSDK.git#2.0.0
+https://github.com/Twice-Apps/TwiceSDK.git
 ```
 Or add to `Packages/manifest.json`:
 ```json
-"co.twiceapps.sdk": "https://github.com/Twice-Apps/TwiceSDK.git#2.0.0"
+"co.twiceapps.sdk": "https://github.com/Twice-Apps/TwiceSDK.git"
 ```
-Pin a version tag (`#2.0.0`) for reproducible builds, or omit it for the latest commit.
+This pulls the latest commit. Once you tag releases you can pin a version (e.g. `#1.0.0`) for
+reproducible builds.
 
 ## Setup
 1. `Assets → Create → Twice → SDK Settings`.
