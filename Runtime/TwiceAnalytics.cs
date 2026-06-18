@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
 using TwiceSDK;
+using TwiceSDK.VersionCheck;
 
 namespace TwiceSDK.Analytics
 {
@@ -99,6 +100,7 @@ namespace TwiceSDK.Analytics
             public string sessionId;
             public string platform;
             public string appVersion;
+            public string buildNumber;
             public string endpoint;
             public string apiKeyMasked;
             public string lastStatus;
@@ -173,6 +175,7 @@ namespace TwiceSDK.Analytics
         string _sessionId;
         string _platform;
         string _appVersion;
+        string _buildNumber; // owned by TwiceVersionChecker; cached here for the event envelope
         DateTime _sessionStartUtc;
         DateTime? _backgroundSinceUtc;
 
@@ -220,6 +223,7 @@ namespace TwiceSDK.Analytics
             _consent = PlayerPrefs.GetInt(ConsentKey, 1) == 1;
             _platform = ResolvePlatform();
             _appVersion = Application.version;
+            _buildNumber = TwiceVersionChecker.BuildNumber; // platform build no (version checker's concern)
             _queueFilePath = Path.Combine(Application.persistentDataPath, QueueFileName);
         }
 
@@ -526,6 +530,8 @@ namespace TwiceSDK.Analytics
             sb.Append("\"user_id\":").Append(JsonConvert.ToString(Clamp(_userId, 80))).Append(',');
             sb.Append("\"platform\":").Append(JsonConvert.ToString(_platform)).Append(',');
             sb.Append("\"app_version\":").Append(JsonConvert.ToString(_appVersion)).Append(',');
+            if (!string.IsNullOrEmpty(_buildNumber))
+                sb.Append("\"build\":").Append(JsonConvert.ToString(_buildNumber)).Append(',');
             sb.Append("\"env\":").Append(JsonConvert.ToString(IsSandbox ? "sandbox" : "production")).Append(',');
             sb.Append("\"events\":[");
             for (int i = 0; i < batch.Count; i++)
@@ -681,6 +687,7 @@ namespace TwiceSDK.Analytics
                 sessionId = _sessionId,
                 platform = _platform,
                 appVersion = _appVersion,
+                buildNumber = _buildNumber,
                 endpoint = _endpointBaseUrl,
                 apiKeyMasked = MaskKey(_apiKey),
                 lastStatus = _lastStatus,
