@@ -19,6 +19,12 @@ All notable changes to the Twice SDK are documented here. This project adheres t
 - **Remote Config** (`TwiceSDK.RemoteConfig.TwiceRemoteConfig`): pulls `GET {base}/sdk/config`,
   caches it (offline + instant next launch), bumps a `version`, and exposes typed getters
   (`GetBool/Int/Long/Float/Double/String`), `GetRawJson` and `GetJson<T>`, plus `OnUpdated`.
+- **Version prompt** (`TwiceSDK.VersionCheck.TwiceUpdatePrompt`): drop the `VersionChecker` prefab
+  (full-screen blocking Canvas: black tint + "Update Required" + Update button) into the first scene.
+  On start it runs the version check, reveals the prompt when an update is needed (Update button →
+  store URL from the panel, incl. iOS app id) or destroys itself otherwise. Verbose debug logs.
+- **`TwiceSDK.Twice`** facade with `Twice.Initialize()` — optional explicit SDK entry point for future
+  module wiring.
 - **Settings** (`TwiceSDK.TwiceSettings`) ScriptableObject (`Create → Twice → SDK Settings`),
   auto-loaded from `Resources/TwiceSettings`. Editor auto-creates an empty one on import
   (paste your X-App-Key in the Inspector).
