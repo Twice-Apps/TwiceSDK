@@ -138,25 +138,75 @@ namespace TwiceSDK.Leaderboards
                 string url = baseUrl + "/sdk/leaderboard/rank?board=" + UnityWebRequest.EscapeURL(leaderboardId)
                            + "&user_id=" + UnityWebRequest.EscapeURL(TwiceAnalytics.UserId);
                 TwiceLeaderboardsRunner.EnsureExists();
-                TwiceLeaderboardsRunner.Instance.GetObject(apiKey, url, j =>
-                {
-                    var r = new LeaderboardRank { Found = false, Rank = 0, Value = 0d, Total = 0, Name = "" };
-                    if (j != null)
-                    {
-                        r.Found = (bool?)j["found"] ?? false;
-                        r.Rank  = (int?)j["rank"] ?? 0;
-                        r.Value = (double?)j["value"] ?? 0d;
-                        r.Total = (int?)j["total"] ?? 0;
-                        r.Name  = (string)j["name"] ?? "";
-                    }
-                    onResult?.Invoke(r);
-                });
+                TwiceLeaderboardsRunner.Instance.GetObject(apiKey, url, j => onResult?.Invoke(ParseRank(j)));
             }
             catch (Exception e)
             {
                 Debug.LogWarning("[TwiceLeaderboards] " + e);
                 onResult?.Invoke(default);
             }
+        }
+
+        // ---- "Before reset" variants (read the last archived period) --------
+
+        /// <summary>Like <see cref="GetTop"/> but reads the most recently reset (archived) period.
+        /// Lets you keep showing the previous standings after a reset.</summary>
+        public static void GetTopBeforeReset(string leaderboardId, int count, Action<LeaderboardEntry[]> onResult)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
+                string apiKey, baseUrl;
+                ResolveConfig(out apiKey, out baseUrl);
+                if (string.IsNullOrEmpty(apiKey)) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
+
+                count = Mathf.Clamp(count, 1, 1000);
+                string url = baseUrl + "/sdk/leaderboard?board=" + UnityWebRequest.EscapeURL(leaderboardId)
+                           + "&limit=" + count.ToString(CultureInfo.InvariantCulture) + "&period=previous";
+                TwiceLeaderboardsRunner.EnsureExists();
+                TwiceLeaderboardsRunner.Instance.GetJson(apiKey, url, onResult);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[TwiceLeaderboards] " + e);
+                onResult?.Invoke(Array.Empty<LeaderboardEntry>());
+            }
+        }
+
+        /// <summary>Like <see cref="GetMyRank"/> but for the most recently reset (archived) period.</summary>
+        public static void GetMyRankBeforeReset(string leaderboardId, Action<LeaderboardRank> onResult)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(default); return; }
+                string apiKey, baseUrl;
+                ResolveConfig(out apiKey, out baseUrl);
+                if (string.IsNullOrEmpty(apiKey)) { onResult?.Invoke(default); return; }
+
+                string url = baseUrl + "/sdk/leaderboard/rank?board=" + UnityWebRequest.EscapeURL(leaderboardId)
+                           + "&user_id=" + UnityWebRequest.EscapeURL(TwiceAnalytics.UserId) + "&period=previous";
+                TwiceLeaderboardsRunner.EnsureExists();
+                TwiceLeaderboardsRunner.Instance.GetObject(apiKey, url, j => onResult?.Invoke(ParseRank(j)));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[TwiceLeaderboards] " + e);
+                onResult?.Invoke(default);
+            }
+        }
+
+        static LeaderboardRank ParseRank(JObject j)
+        {
+            var r = new LeaderboardRank { Found = false, Rank = 0, Value = 0d, Total = 0, Name = "" };
+            if (j != null)
+            {
+                r.Found = (bool?)j["found"] ?? false;
+                r.Rank  = (int?)j["rank"] ?? 0;
+                r.Value = (double?)j["value"] ?? 0d;
+                r.Total = (int?)j["total"] ?? 0;
+                r.Name  = (string)j["name"] ?? "";
+            }
+            return r;
         }
 
         static void ResolveConfig(out string apiKey, out string baseUrl)
