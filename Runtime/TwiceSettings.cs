@@ -70,6 +70,14 @@ namespace TwiceSDK
         [Tooltip("Leaderboards: Submit / GetTop / GetMyRank calls. When off, those calls are no-ops (no network).")]
         public bool enableLeaderboards = true;
 
+        [Header("Identity")]
+        [Tooltip("ON (default): the player id is the stable per-device identifier (iOS = vendor IDFV, " +
+                 "not the advertising IDFA) — a reinstall keeps the same player, and the same user is " +
+                 "recognised across all of this studio's games on that device. OFF: a random GUID is " +
+                 "generated and stored locally (resets on uninstall). Note: a device identifier is " +
+                 "personal data under KVKK/GDPR — disclose it in your privacy text.")]
+        public bool useDeviceIdentifier = true;
+
         [Header("Analytics")]
         [Tooltip("Automatically track session_start / session_end events.")]
         public bool autoTrackSessions = true;

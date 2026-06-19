@@ -15,7 +15,7 @@ namespace TwiceSDK.Editor
     [CustomEditor(typeof(TwiceSettings))]
     public class TwiceSettingsEditor : UnityEditor.Editor
     {
-        static bool _project = true, _init = true, _modules = true, _analytics = true, _remote = true, _env, _debug;
+        static bool _project = true, _init = true, _modules = true, _identity = true, _analytics = true, _remote = true, _env, _debug;
         bool _fetching;
         string _lastResponse;
 
@@ -54,6 +54,17 @@ namespace TwiceSDK.Editor
                 Prop("enableVersionCheck", "Version Checker");
                 Prop("enableLeaderboards", "Leaderboards");
                 EditorGUILayout.HelpBox("Kapalı bir modül init olmaz / ağ çağrısı yapmaz. Kullanmadığın modülü kapat.", MessageType.None);
+            });
+
+            Section(ref _identity, "Identity", () =>
+            {
+                Prop("useDeviceIdentifier", "Use Device Identifier");
+                if (s.useDeviceIdentifier)
+                    EditorGUILayout.HelpBox("Oyuncu kimliği = cihaz kimliği (iOS = IDFV, IDFA değil). " +
+                        "Reinstall'da aynı oyuncu; iOS'ta aynı kullanıcı tüm oyunlarında tanınır. " +
+                        "Cihaz kimliği KVKK/GDPR'da kişisel veridir — aydınlatma metnine ekle.", MessageType.Info);
+                else
+                    EditorGUILayout.HelpBox("Rastgele GUID kullanılır (lokal saklanır, uninstall'da sıfırlanır).", MessageType.None);
             });
 
             Section(ref _analytics, "Analytics", () =>

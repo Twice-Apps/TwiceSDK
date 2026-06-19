@@ -236,18 +236,43 @@ namespace TwiceSDK.Analytics
 
         void InitIdentity()
         {
-            _userId = PlayerPrefs.GetString(UserIdKey, null);
-            if (string.IsNullOrEmpty(_userId))
-            {
-                _userId = Guid.NewGuid().ToString("N");
-                PlayerPrefs.SetString(UserIdKey, _userId);
-                PlayerPrefs.Save();
-            }
+            _userId = ResolveUserId();
             _consent = PlayerPrefs.GetInt(ConsentKey, 1) == 1;
             _platform = ResolvePlatform();
             _appVersion = Application.version;
             _buildNumber = TwiceVersionChecker.BuildNumber; // platform build no (version checker's concern)
             _queueFilePath = Path.Combine(Application.persistentDataPath, QueueFileName);
+        }
+
+        /// <summary>
+        /// Resolves the analytics user id. By default it uses the stable per-device identifier
+        /// (<see cref="SystemInfo.deviceUniqueIdentifier"/>) so a reinstall keeps the same player —
+        /// on iOS this is the vendor IDFV (NOT the advertising IDFA), so the same user is also
+        /// recognised across all of this studio's games on that device. Platforms without a stable
+        /// device id (e.g. WebGL), or when <c>useDeviceIdentifier</c> is off, fall back to a random
+        /// GUID persisted in PlayerPrefs.
+        /// </summary>
+        string ResolveUserId()
+        {
+            bool useDevice = true;
+            var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
+            if (s != null) useDevice = s.useDeviceIdentifier;
+
+            if (useDevice)
+            {
+                string dev = SystemInfo.deviceUniqueIdentifier;
+                if (!string.IsNullOrEmpty(dev) && dev != SystemInfo.unsupportedIdentifier)
+                    return dev.Replace("-", "").ToLowerInvariant();
+            }
+
+            string id = PlayerPrefs.GetString(UserIdKey, null);
+            if (string.IsNullOrEmpty(id))
+            {
+                id = Guid.NewGuid().ToString("N");
+                PlayerPrefs.SetString(UserIdKey, id);
+                PlayerPrefs.Save();
+            }
+            return id;
         }
 
         // ---- configuration --------------------------------------------------

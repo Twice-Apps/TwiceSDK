@@ -1,6 +1,6 @@
 {
   "name": "co.twiceapps.sdk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "displayName": "Twice SDK",
   "description": "Lightweight, dependency-free SDK for the Twice backend: analytics (events, sessions, revenue) + remote config (typed key-value, PlayFab Title-Data style). Drop-in, privacy-safe, works on iOS/Android/WebGL/Windows/macOS/Editor.",
   "unity": "2021.3",

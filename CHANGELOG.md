@@ -3,6 +3,21 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-06-19
+### Added
+- **Stable per-device identity** (`TwiceSettings.useDeviceIdentifier`, default on): the analytics
+  user id now derives from `SystemInfo.deviceUniqueIdentifier` — on iOS the vendor **IDFV** (not the
+  advertising IDFA). A reinstall keeps the same player, and on iOS the same user is recognised across
+  all of the studio's games on that device. WebGL / unsupported platforms (and when the toggle is
+  off) fall back to the previous random GUID stored in PlayerPrefs.
+
+### Notes
+- This changes the user id for existing installs once (device id instead of the old random GUID), so
+  those players appear as new one time.
+- Android cross-game recognition is not guaranteed (the device id is scoped per app-signing key);
+  reinstall-dedup works on both iOS and Android.
+- A device identifier is personal data under KVKK/GDPR — disclose it in the app's privacy text.
+
 ## [1.1.0] - 2026-06-19
 ### Added
 - **Leaderboards** (`TwiceSDK.Leaderboards.TwiceLeaderboards`): `Submit`, `GetTop`, `GetEntryCount`,
