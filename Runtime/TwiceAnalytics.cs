@@ -217,7 +217,9 @@ namespace TwiceSDK.Analytics
         static void AutoBootstrap()
         {
             var settings = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
-            if (settings == null) return; // no asset → wait for a manual TwiceAnalytics.Init()
+            if (settings == null) return;                                   // no asset → wait for a manual TwiceAnalytics.Init()
+            if (settings.initialization == InitializationMode.RequireBootstrap) return; // gated: only Twice.Initialize() (TwiceBootstrap) may start it
+            if (!settings.enableAnalytics) return;                          // module disabled
             EnsureExists();
             Instance.ConfigureFromSettings(settings);
         }

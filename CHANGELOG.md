@@ -3,6 +3,29 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-06-19
+### Added
+- **Leaderboards** (`TwiceSDK.Leaderboards.TwiceLeaderboards`): `Submit`, `GetTop`, `GetEntryCount`,
+  `GetMyRank`, and the archived-period variants `GetTopBeforeReset` / `GetMyRankBeforeReset`.
+- **Ad revenue** (`TwiceAnalytics.AdRevenue`): impression-level revenue with network / placement /
+  format, for the Monetization dashboard. Added `TwiceAnalytics.UserId` accessor.
+- **Initialization gate** (`TwiceSettings.initialization`, `InitializationMode`): `RequireBootstrap`
+  makes the SDK initialize **only** when a `TwiceBootstrap` (the TwiceSDK prefab) calls
+  `Twice.Initialize()`. In that mode the boot-time auto-inits do nothing — no runner, no
+  `session_start`, no version check / remote config. `Auto` (default) preserves the existing
+  prefab-less auto-init behaviour.
+- **Per-module toggles** (`TwiceSettings`): `enableAnalytics`, `enableRemoteConfig`,
+  `enableVersionCheck`, `enableLeaderboards`. A disabled module never initializes / makes no
+  network calls.
+- **Scene-presence notice**: entering Play mode with no `TwiceBootstrap` in the scene logs a
+  coloured console line (Editor / development builds), adapted to the chosen init mode.
+
+### Changed
+- `Twice.Initialize()` is now the single init authority: it **configures** analytics and remote
+  config from the settings asset (not just flush/fetch) before running them, so `RequireBootstrap`
+  works end-to-end. Each ordered step is skipped when its module toggle is off. Re-configuring an
+  already-started module stays idempotent.
+
 ## [1.0.0] - 2026-06-18
 ### Added
 - **Analytics** (`TwiceSDK.Analytics.TwiceAnalytics`): batched event ingest with offline

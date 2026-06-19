@@ -67,33 +67,56 @@ namespace TwiceSDK
 
         IEnumerator Sequence()
         {
+            // This sequence is the SINGLE init authority in RequireBootstrap mode (where the
+            // boot-time AutoBootstraps are gated off), so it CONFIGURES each module here — not
+            // just flush/fetch. In Auto mode the modules are already configured; re-configuring
+            // is idempotent (Configure only calls Begin() once).
+            var settings = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
+            bool analyticsOn = settings == null || settings.enableAnalytics;
+            bool remoteOn     = settings == null || settings.enableRemoteConfig;
+            bool versionOn    = settings == null || settings.enableVersionCheck;
+
             // 1) Version check (pull) — first, so the game can gate before loading anything else.
-            Debug.Log("[Twice] 1/3 Version check…");
-            bool vcDone = false;
-            TwiceVersionChecker.Check(status => { Twice.RaiseVersionChecked(status); vcDone = true; });
-            yield return WaitUntil(() => vcDone, 25f);
+            if (versionOn)
+            {
+                Debug.Log("[Twice] 1/3 Version check…");
+                bool vcDone = false;
+                TwiceVersionChecker.Check(status => { Twice.RaiseVersionChecked(status); vcDone = true; });
+                yield return WaitUntil(() => vcDone, 25f);
+            }
+            else { Debug.Log("[Twice] 1/3 Version check skipped (module disabled)."); }
             Twice.RaiseProgress("Version checked");
 
-            // 2) Analytics — flush the session_start queued at boot (push).
-            Debug.Log("[Twice] 2/3 Analytics…");
-            TwiceAnalytics.Flush();
-            yield return WaitUntil(() => TwiceAnalytics.GetDebugInfo().pending == 0, 10f);
+            // 2) Analytics — configure from the settings asset, then flush the queued session_start.
+            if (analyticsOn)
+            {
+                Debug.Log("[Twice] 2/3 Analytics…");
+                if (settings != null)
+                {
+                    TwiceAnalyticsRunner.EnsureExists();
+                    TwiceAnalyticsRunner.Instance.ConfigureFromSettings(settings);
+                }
+                TwiceAnalytics.Flush();
+                yield return WaitUntil(() => TwiceAnalytics.GetDebugInfo().pending == 0, 10f);
+            }
+            else { Debug.Log("[Twice] 2/3 Analytics skipped (module disabled)."); }
             Twice.RaiseProgress("Analytics initialized");
 
-            // 3) Remote config (pull) — honour the autoFetchRemoteConfig setting.
-            var settings = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
-            if (settings == null || settings.autoFetchRemoteConfig)
+            // 3) Remote config (pull) — configure, then fetch (honouring autoFetchRemoteConfig).
+            if (remoteOn && (settings == null || settings.autoFetchRemoteConfig))
             {
                 Debug.Log("[Twice] 3/3 Remote config…");
+                if (settings != null)
+                {
+                    TwiceRemoteConfigRunner.EnsureExists();
+                    TwiceRemoteConfigRunner.Instance.ConfigureFromSettings(settings);
+                }
                 bool rcDone = false;
                 TwiceRemoteConfig.Fetch(ok => rcDone = true);
                 yield return WaitUntil(() => rcDone, 25f);
-                Twice.RaiseProgress("Remote config initialized");
             }
-            else
-            {
-                Debug.Log("[Twice] 3/3 Remote config skipped (autoFetchRemoteConfig off).");
-            }
+            else { Debug.Log(remoteOn ? "[Twice] 3/3 Remote config skipped (autoFetchRemoteConfig off)." : "[Twice] 3/3 Remote config skipped (module disabled)."); }
+            Twice.RaiseProgress("Remote config initialized");
 
             Twice.RaiseProgress("Ready");
             Debug.Log("[Twice] Initialization sequence complete.");

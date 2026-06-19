@@ -11,6 +11,17 @@ namespace TwiceSDK
         Android = 2,
     }
 
+    /// <summary>Controls whether the SDK starts itself at boot or waits for a TwiceBootstrap object.</summary>
+    public enum InitializationMode
+    {
+        /// <summary>Default / backward-compatible: the SDK auto-initializes at boot from the
+        /// settings asset (no bootstrap object required).</summary>
+        Auto = 0,
+        /// <summary>The SDK does NOT auto-start. It initializes only when a TwiceBootstrap object
+        /// calls <c>Twice.Initialize()</c> — lets you gate init on the prefab's presence.</summary>
+        RequireBootstrap = 1,
+    }
+
     /// <summary>How the SDK decides whether events are tagged sandbox or production.</summary>
     public enum EnvironmentMode
     {
@@ -39,6 +50,25 @@ namespace TwiceSDK
 
         [Tooltip("Base URL of the Twice API. Default points at production.")]
         public string endpointBaseUrl = "https://www.twiceapps.co/api/v1";
+
+        [Header("Initialization")]
+        [Tooltip("Auto (default): SDK auto-initializes at boot from this asset (current behavior). " +
+                 "RequireBootstrap: the SDK does NOT auto-start; it initializes only when a TwiceBootstrap " +
+                 "object (the TwiceSDK prefab) calls Twice.Initialize(). Lets you gate init on the prefab's presence.")]
+        public InitializationMode initialization = InitializationMode.Auto;
+
+        [Header("Modules")]
+        [Tooltip("Analytics: sessions, events, IAP/ad revenue. When off, the analytics runner never starts.")]
+        public bool enableAnalytics = true;
+
+        [Tooltip("Remote Config: fetch typed key/values from the backend. When off, no config is loaded/fetched.")]
+        public bool enableRemoteConfig = true;
+
+        [Tooltip("Version Checker: ask the backend whether this build needs an update. When off, no check runs.")]
+        public bool enableVersionCheck = true;
+
+        [Tooltip("Leaderboards: Submit / GetTop / GetMyRank calls. When off, those calls are no-ops (no network).")]
+        public bool enableLeaderboards = true;
 
         [Header("Analytics")]
         [Tooltip("Automatically track session_start / session_end events.")]

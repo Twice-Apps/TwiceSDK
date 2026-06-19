@@ -98,7 +98,9 @@ namespace TwiceSDK.RemoteConfig
         static void AutoBootstrap()
         {
             var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
-            if (s == null) return; // no asset → wait for a manual TwiceRemoteConfig.Init()/Fetch()
+            if (s == null) return;                                   // no asset → wait for a manual TwiceRemoteConfig.Init()/Fetch()
+            if (s.initialization == InitializationMode.RequireBootstrap) return; // gated: only Twice.Initialize() may start it
+            if (!s.enableRemoteConfig) return;                       // module disabled
             EnsureExists();
             Instance.ConfigureFromSettings(s);
             // Boot fetch is deferred to Twice.Initialize() step 3 (ordered sequence). The cached

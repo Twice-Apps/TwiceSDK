@@ -15,7 +15,7 @@ namespace TwiceSDK.Editor
     [CustomEditor(typeof(TwiceSettings))]
     public class TwiceSettingsEditor : UnityEditor.Editor
     {
-        static bool _project = true, _analytics = true, _remote = true, _env, _debug;
+        static bool _project = true, _init = true, _modules = true, _analytics = true, _remote = true, _env, _debug;
         bool _fetching;
         string _lastResponse;
 
@@ -33,6 +33,27 @@ namespace TwiceSDK.Editor
             {
                 Prop("apiKey", "API Key (X-App-Key)");
                 Prop("endpointBaseUrl", "Endpoint Base URL");
+            });
+
+            Section(ref _init, "Initialization", () =>
+            {
+                Prop("initialization", "Init Mode");
+                if (s.initialization == InitializationMode.RequireBootstrap)
+                    EditorGUILayout.HelpBox("RequireBootstrap: SDK boot'ta KENDİLİĞİNDEN başlamaz. " +
+                        "Yalnızca sahnedeki TwiceSDK prefab'i (TwiceBootstrap) Twice.Initialize() çağırınca başlar. " +
+                        "Prefab yoksa hiçbir modül init olmaz (event/ağ/version-check/remote-config çalışmaz).", MessageType.Info);
+                else
+                    EditorGUILayout.HelpBox("Auto (varsayılan): SDK boot'ta bu asset'ten otomatik başlar. " +
+                        "Sıralı init + güncelleme promptu için TwiceSDK prefab'ini de ekleyebilirsin.", MessageType.None);
+            });
+
+            Section(ref _modules, "Modules", () =>
+            {
+                Prop("enableAnalytics", "Analytics");
+                Prop("enableRemoteConfig", "Remote Config");
+                Prop("enableVersionCheck", "Version Checker");
+                Prop("enableLeaderboards", "Leaderboards");
+                EditorGUILayout.HelpBox("Kapalı bir modül init olmaz / ağ çağrısı yapmaz. Kullanmadığın modülü kapat.", MessageType.None);
             });
 
             Section(ref _analytics, "Analytics", () =>

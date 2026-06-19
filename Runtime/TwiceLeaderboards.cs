@@ -46,6 +46,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onDone?.Invoke(false); return; }
                 if (string.IsNullOrEmpty(leaderboardId))
                 {
                     Debug.LogWarning("[TwiceLeaderboards] Submit called with empty leaderboardId.");
@@ -84,6 +85,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
                 if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
                 string apiKey, baseUrl;
                 ResolveConfig(out apiKey, out baseUrl);
@@ -108,6 +110,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onResult?.Invoke(0); return; }
                 if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(0); return; }
                 string apiKey, baseUrl;
                 ResolveConfig(out apiKey, out baseUrl);
@@ -130,6 +133,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onResult?.Invoke(default); return; }
                 if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(default); return; }
                 string apiKey, baseUrl;
                 ResolveConfig(out apiKey, out baseUrl);
@@ -155,6 +159,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
                 if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(Array.Empty<LeaderboardEntry>()); return; }
                 string apiKey, baseUrl;
                 ResolveConfig(out apiKey, out baseUrl);
@@ -178,6 +183,7 @@ namespace TwiceSDK.Leaderboards
         {
             try
             {
+                if (!LeaderboardsEnabled()) { onResult?.Invoke(default); return; }
                 if (string.IsNullOrEmpty(leaderboardId)) { onResult?.Invoke(default); return; }
                 string apiKey, baseUrl;
                 ResolveConfig(out apiKey, out baseUrl);
@@ -207,6 +213,13 @@ namespace TwiceSDK.Leaderboards
                 r.Name  = (string)j["name"] ?? "";
             }
             return r;
+        }
+
+        /// <summary>Leaderboards module toggle from the settings asset (default: enabled).</summary>
+        static bool LeaderboardsEnabled()
+        {
+            var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
+            return s == null || s.enableLeaderboards;
         }
 
         static void ResolveConfig(out string apiKey, out string baseUrl)
