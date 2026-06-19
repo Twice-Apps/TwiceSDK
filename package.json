@@ -18,17 +18,5 @@
     "events",
     "remote-config",
     "twice"
-  ],
-  "samples": [
-    {
-      "displayName": "Quick Start",
-      "description": "Init, a preset event, a custom event, Flush, and reading remote config.",
-      "path": "Samples~/QuickStart"
-    },
-    {
-      "displayName": "Examples",
-      "description": "Demo scene + LoadingScreen prefab: the InfoText lists each init step via Twice.OnProgress (Version checked → Analytics → Remote config → Ready), plus a remote-config tester.",
-      "path": "Samples~/Examples"
-    }
   ]
 }

@@ -25,10 +25,12 @@ All notable changes to the Twice SDK are documented here. This project adheres t
   config from the settings asset (not just flush/fetch) before running them, so `RequireBootstrap`
   works end-to-end. Each ordered step is skipped when its module toggle is off. Re-configuring an
   already-started module stays idempotent.
-- **Bootstrap prefab is now project-editable.** `TwiceSDK.prefab` (with the per-game VersionChecker
-  prompt design) moved out of the immutable package into `Samples~/Bootstrap`, and is auto-copied on
-  first load to `Assets/TwiceSDK/Prefabs/TwiceSDK.prefab` (editable; GUID preserved so scene
-  references still resolve; existing copies are never overwritten).
+- **Editable content auto-installs to `Assets/TwiceSDK/` — no "Import Sample" step.** The bootstrap
+  prefab (with the per-game VersionChecker prompt) and the Examples / QuickStart demos moved out of
+  the immutable package into a hidden `Distributables~` folder; the `samples` manifest entries were
+  removed. An editor installer copies the content to `Assets/TwiceSDK/` (Prefabs / Examples /
+  QuickStart) on load, once per package version. Copy is non-destructive (existing files / your edits
+  are never overwritten) and metas are copied so GUIDs and scene references stay stable.
 
 ## [1.0.0] - 2026-06-18
 ### Added
