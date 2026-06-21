@@ -66,7 +66,7 @@ namespace TwiceSDK.Push
 
             string apiKey, baseUrl;
             ResolveConfig(out apiKey, out baseUrl);
-            if (string.IsNullOrEmpty(apiKey)) { yield break; }
+            if (string.IsNullOrEmpty(apiKey)) { Debug.LogWarning("[TwicePush] No API key in TwiceSettings — cannot register token."); yield break; }
 
             // APNs environment: development (Xcode) builds use sandbox; TestFlight/App Store = production.
             string env = (platform == "ios" && Debug.isDebugBuild) ? "sandbox" : "production";
@@ -83,8 +83,8 @@ namespace TwiceSDK.Push
                 req.timeout = 15;
                 yield return req.SendWebRequest();
                 bool ok = req.result == UnityWebRequest.Result.Success && req.responseCode >= 200 && req.responseCode < 300;
-                if (ok) { _lastSent = token; }
-                else { Debug.Log("[TwicePush] register failed (code=" + req.responseCode + ", err=" + req.error + ")."); }
+                if (ok) { _lastSent = token; Debug.Log("[TwicePush] token registered with backend (" + platform + ")."); }
+                else { Debug.LogWarning("[TwicePush] register failed (code=" + req.responseCode + ", err=" + req.error + ", resp=" + (req.downloadHandler != null ? req.downloadHandler.text : "") + ")."); }
             }
         }
 

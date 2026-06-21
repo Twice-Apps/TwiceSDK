@@ -42,13 +42,26 @@ namespace TwiceSDK.Push
                 AuthorizationOption.Alert | AuthorizationOption.Badge | AuthorizationOption.Sound, true))
             {
                 while (!req.IsFinished) { yield return null; }
-                if (!string.IsNullOrEmpty(req.DeviceToken))
+
+                // The APNs device token often arrives a moment AFTER authorization finishes —
+                // poll DeviceToken for a few seconds before giving up.
+                string token = req.DeviceToken;
+                float w = 0f;
+                while (string.IsNullOrEmpty(token) && w < 10f)
                 {
-                    TwicePushCore.Register(req.DeviceToken, "ios");
+                    w += Time.unscaledDeltaTime;
+                    yield return null;
+                    token = req.DeviceToken;
                 }
-                else if (s.debugLogging)
+
+                if (!string.IsNullOrEmpty(token))
                 {
-                    Debug.Log("[TwicePush.iOS] No APNs device token (permission denied or registration failed).");
+                    Debug.Log("[TwicePush.iOS] APNs token acquired (" + token.Length + " chars) — registering.");
+                    TwicePushCore.Register(token, "ios");
+                }
+                else
+                {
+                    Debug.LogWarning("[TwicePush.iOS] No APNs device token after wait. granted=" + req.Granted + " error=" + req.Error);
                 }
             }
         }
