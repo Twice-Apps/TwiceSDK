@@ -1,19 +1,18 @@
 {
-    "name": "TwiceSDK.Editor",
-    "rootNamespace": "TwiceSDK.Editor",
+    "name": "TwiceSDK.Push.iOS",
+    "rootNamespace": "TwiceSDK.Push",
     "references": [
         "TwiceSDK",
-        "Unity.Notifications"
+        "Unity.Notifications.iOS"
     ],
     "includePlatforms": [
-        "Editor"
+        "Editor",
+        "iOS"
     ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
-    "overrideReferences": true,
-    "precompiledReferences": [
-        "Newtonsoft.Json.dll"
-    ],
+    "overrideReferences": false,
+    "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],

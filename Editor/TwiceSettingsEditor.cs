@@ -53,7 +53,8 @@ namespace TwiceSDK.Editor
                 Prop("enableRemoteConfig", "Remote Config");
                 Prop("enableVersionCheck", "Version Checker");
                 Prop("enableLeaderboards", "Leaderboards");
-                EditorGUILayout.HelpBox("Kapalı bir modül init olmaz / ağ çağrısı yapmaz. Kullanmadığın modülü kapat.", MessageType.None);
+                Prop("enablePushNotifications", "Notifications (Push)");
+                EditorGUILayout.HelpBox("Kapalı bir modül init olmaz / ağ çağrısı yapmaz. Kullanmadığın modülü kapat.\nPush için ayrıca Firebase Messaging import edilmeli ve TWICE_FCM define eklenmeli.", MessageType.None);
             });
 
             Section(ref _identity, "Identity", () =>
@@ -101,7 +102,13 @@ namespace TwiceSDK.Editor
             });
             Section(ref _debug, "Debug", () => Prop("debugLogging"));
 
-            serializedObject.ApplyModifiedProperties();
+            if (serializedObject.ApplyModifiedProperties())
+            {
+                // Keep the TWICE_FCM scripting define in sync with the Push toggle (+ Firebase presence).
+                TwicePushDefineSync.Sync();
+                // Auto-enable the iOS push capability (Mobile Notifications) when push is on.
+                TwicePushiOSSetup.Sync();
+            }
         }
 
         // ---- UI helpers -----------------------------------------------------

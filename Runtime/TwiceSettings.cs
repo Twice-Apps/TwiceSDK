@@ -70,6 +70,11 @@ namespace TwiceSDK
         [Tooltip("Leaderboards: Submit / GetTop / GetMyRank calls. When off, those calls are no-ops (no network).")]
         public bool enableLeaderboards = true;
 
+        [Tooltip("Push Notifications: capture the device's FCM registration token and register it with the " +
+                 "backend so the panel can send player campaigns. Requires Firebase Messaging imported AND the " +
+                 "TWICE_FCM scripting define set (otherwise the push code is excluded and nothing happens). When off, no token is captured.")]
+        public bool enablePushNotifications = true;
+
         [Header("Identity")]
         [Tooltip("ON (default): the player id is the stable per-device identifier (iOS = vendor IDFV, " +
                  "not the advertising IDFA) — a reinstall keeps the same player, and the same user is " +
