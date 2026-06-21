@@ -78,6 +78,18 @@ namespace TwiceSDK.Analytics
         public static void Purchase(string productId, double price, string currency, IDictionary<string, object> extra = null) =>
             LogEvent("purchase", With(extra, ("product_id", productId), ("price", price), ("currency", currency)));
 
+        /// <summary>
+        /// Purchase with a human-readable product name (e.g. the App Store / Play
+        /// display name "Mega No Ads"). The name powers the operator-notification
+        /// and dashboard labels; pass the localized store title when you have it.
+        /// </summary>
+        public static void Purchase(string productId, string productName, double price, string currency, IDictionary<string, object> extra = null)
+        {
+            var p = With(extra, ("product_id", productId), ("price", price), ("currency", currency));
+            if (!string.IsNullOrEmpty(productName)) p["product_name"] = productName;
+            LogEvent("purchase", p);
+        }
+
         public static void AdWatched(string placement, IDictionary<string, object> extra = null) =>
             LogEvent("ad_watched", With(extra, "placement", placement));
 
@@ -104,9 +116,9 @@ namespace TwiceSDK.Analytics
         /// <summary>Request an immediate (asynchronous) flush of the queued events.</summary>
         public static void Flush() => Guard(() => TwiceAnalyticsRunner.Instance?.RequestFlush());
 
-        /// <summary>The persistent anonymous user id (the same id sent with every event,
-        /// used to attribute leaderboard scores and purchases). "" before initialization.</summary>
-        public static string UserId => GetDebugInfo().userId ?? "";
+        // Player identity (user id) and profile (display name) live in TwiceSDK.Players.TwicePlayers —
+        // this class stays analytics-only. The runner still carries them internally because the
+        // identity stamps every event and the display name rides the event envelope.
 
         // ---- debug / tooling ------------------------------------------------
 
@@ -164,7 +176,12 @@ namespace TwiceSDK.Analytics
     {
         internal static TwiceAnalyticsRunner Instance { get; private set; }
 
+        // Exposed to TwiceSDK.Players.TwicePlayers (same assembly) — identity & profile accessors.
+        internal string UserId => _userId;
+        internal string DisplayName => _displayName;
+
         const string UserIdKey = "twice_analytics_user_id";
+        const string DisplayNameKey = "twice_display_name";
         const string ConsentKey = "twice_analytics_consent";
         const string QueuePrefsKey = "twice_analytics_queue"; // WebGL fallback
         const string QueueFileName = "twice_analytics_queue.tsv";
@@ -193,6 +210,7 @@ namespace TwiceSDK.Analytics
 
         // identity / session
         string _userId;
+        string _displayName = "";
         string _sessionId;
         string _platform;
         string _appVersion;
@@ -237,6 +255,7 @@ namespace TwiceSDK.Analytics
         void InitIdentity()
         {
             _userId = ResolveUserId();
+            _displayName = PlayerPrefs.GetString(DisplayNameKey, "");
             _consent = PlayerPrefs.GetInt(ConsentKey, 1) == 1;
             _platform = ResolvePlatform();
             _appVersion = Application.version;
@@ -273,6 +292,14 @@ namespace TwiceSDK.Analytics
                 PlayerPrefs.Save();
             }
             return id;
+        }
+
+        internal void SetDisplayName(string name)
+        {
+            _displayName = string.IsNullOrEmpty(name) ? "" : name.Trim();
+            PlayerPrefs.SetString(DisplayNameKey, _displayName);
+            PlayerPrefs.Save();
+            RequestFlush(); // push it to the backend with the next batch
         }
 
         // ---- configuration --------------------------------------------------
@@ -587,6 +614,8 @@ namespace TwiceSDK.Analytics
             sb.Append('{');
             sb.Append("\"session_id\":").Append(JsonConvert.ToString(Clamp(batch[0].sessionId, 80))).Append(',');
             sb.Append("\"user_id\":").Append(JsonConvert.ToString(Clamp(_userId, 80))).Append(',');
+            if (!string.IsNullOrEmpty(_displayName))
+                sb.Append("\"display_name\":").Append(JsonConvert.ToString(Clamp(_displayName, 40))).Append(',');
             sb.Append("\"platform\":").Append(JsonConvert.ToString(_platform)).Append(',');
             sb.Append("\"app_version\":").Append(JsonConvert.ToString(_appVersion)).Append(',');
             if (!string.IsNullOrEmpty(_buildNumber))

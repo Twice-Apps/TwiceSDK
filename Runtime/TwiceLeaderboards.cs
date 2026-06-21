@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json.Linq;
 using TwiceSDK;
-using TwiceSDK.Analytics;
+using TwiceSDK.Players;
 
 namespace TwiceSDK.Leaderboards
 {
@@ -32,7 +32,7 @@ namespace TwiceSDK.Leaderboards
     /// Leaderboards client. Submits a score for the current player and fetches the
     /// ranked top of a board. The board's sort direction, aggregation (last/min/max/sum)
     /// and reset frequency are configured server-side per board — the client only sends
-    /// the board id + score. Player id is taken from <see cref="TwiceAnalytics.UserId"/>.
+    /// the board id + score. Player id is taken from <see cref="TwicePlayers.UserId"/>.
     /// All calls are non-blocking and never throw into game code.
     /// </summary>
     public static class TwiceLeaderboards
@@ -66,7 +66,7 @@ namespace TwiceSDK.Leaderboards
                 {
                     ["leaderboard_id"] = leaderboardId,
                     ["score"]          = score,
-                    ["user_id"]        = TwiceAnalytics.UserId,
+                    ["user_id"]        = TwicePlayers.UserId,
                 };
                 if (!string.IsNullOrEmpty(playerName)) body["player_name"] = playerName;
 
@@ -140,7 +140,7 @@ namespace TwiceSDK.Leaderboards
                 if (string.IsNullOrEmpty(apiKey)) { onResult?.Invoke(default); return; }
 
                 string url = baseUrl + "/sdk/leaderboard/rank?board=" + UnityWebRequest.EscapeURL(leaderboardId)
-                           + "&user_id=" + UnityWebRequest.EscapeURL(TwiceAnalytics.UserId);
+                           + "&user_id=" + UnityWebRequest.EscapeURL(TwicePlayers.UserId);
                 TwiceLeaderboardsRunner.EnsureExists();
                 TwiceLeaderboardsRunner.Instance.GetObject(apiKey, url, j => onResult?.Invoke(ParseRank(j)));
             }
@@ -190,7 +190,7 @@ namespace TwiceSDK.Leaderboards
                 if (string.IsNullOrEmpty(apiKey)) { onResult?.Invoke(default); return; }
 
                 string url = baseUrl + "/sdk/leaderboard/rank?board=" + UnityWebRequest.EscapeURL(leaderboardId)
-                           + "&user_id=" + UnityWebRequest.EscapeURL(TwiceAnalytics.UserId) + "&period=previous";
+                           + "&user_id=" + UnityWebRequest.EscapeURL(TwicePlayers.UserId) + "&period=previous";
                 TwiceLeaderboardsRunner.EnsureExists();
                 TwiceLeaderboardsRunner.Instance.GetObject(apiKey, url, j => onResult?.Invoke(ParseRank(j)));
             }

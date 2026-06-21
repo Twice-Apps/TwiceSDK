@@ -3,6 +3,22 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-06-21
+### Added
+- **Players module** (`TwiceSDK.Players.TwicePlayers`): the public home for player identity & profile,
+  separate from analytics. Exposes `UserId`, `DisplayName`, and `SetDisplayName(name)`.
+- **Player display name** (`TwicePlayers.SetDisplayName(name)`): set a friendly name for the current
+  player from client code. It is persisted locally and rides on the next event batch's envelope
+  (`display_name`) — no separate endpoint. The backend stores it per uid (`profiles.json`) and it is
+  shown in the Players panel and overlaid on leaderboard entries (kept in sync everywhere). Admins
+  can also set/clear it manually from the player detail page. Pass null/empty to clear.
+
+### Changed
+- Player identity moved out of `TwiceAnalytics` to keep that class analytics-only: use
+  `TwicePlayers.UserId` (was `TwiceAnalytics.UserId`). `TwiceLeaderboards` now reads it from there.
+  The hidden analytics engine still carries the id/name internally (the id stamps every event and the
+  name rides the envelope).
+
 ## [1.2.0] - 2026-06-19
 ### Added
 - **Stable per-device identity** (`TwiceSettings.useDeviceIdentifier`, default on): the analytics
