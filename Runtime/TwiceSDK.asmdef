@@ -2,7 +2,8 @@
     "name": "TwiceSDK",
     "rootNamespace": "TwiceSDK",
     "references": [
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Unity.Notifications.iOS"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

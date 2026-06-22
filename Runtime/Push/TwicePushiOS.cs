@@ -1,6 +1,7 @@
 #if UNITY_IOS
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Scripting;
 using Unity.Notifications.iOS;
 using TwiceSDK;
 
@@ -12,11 +13,20 @@ namespace TwiceSDK.Push
     /// Unity's Mobile Notifications package. Auto-runs at boot when push is enabled.
     /// Requires "Enable Push Notifications" + "Remote Notification" in
     /// Project Settings → Mobile Notifications → iOS.
+    ///
+    /// This lives in the core TwiceSDK assembly (NOT a separate TwiceSDK.Push.iOS asmdef)
+    /// on purpose: its only entry point is the RuntimeInitializeOnLoadMethod below and
+    /// nothing references it statically. As a standalone unreferenced assembly the IL2CPP
+    /// linker stripped it from device builds (ran in the Editor, vanished on iOS). The core
+    /// assembly is always referenced by the game, so it is never stripped. [Preserve] keeps
+    /// the bootstrap method itself rooted for good measure.
     /// </summary>
+    [Preserve]
     internal class TwicePushiOS : MonoBehaviour
     {
         static TwicePushiOS _instance;
 
+        [Preserve]
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoBootstrap()
         {

@@ -32,6 +32,17 @@ namespace TwiceSDK.Editor
                     NotificationSettings.iOSSettings.AddRemoteNotificationCapability = true;
                     Debug.Log("[TwiceSDK] iOS push capability enabled automatically (Mobile Notifications).");
                 }
+
+                // The package's OWN launch prompt would request notification permission without
+                // registering for remote notifications — granting permission but producing NO APNs
+                // token, and competing with TwicePushiOS's controlled request. Force it off so
+                // TwicePushiOS is the single driver (it issues AuthorizationRequest with
+                // registerForRemoteNotifications:true and captures the token).
+                if (NotificationSettings.iOSSettings.RequestAuthorizationOnAppLaunch)
+                {
+                    NotificationSettings.iOSSettings.RequestAuthorizationOnAppLaunch = false;
+                    Debug.Log("[TwiceSDK] Disabled Mobile Notifications' 'Request Authorization on App Launch' — TwicePush issues its own request so it can capture the APNs token.");
+                }
             }
             catch
             {
