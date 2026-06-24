@@ -552,5 +552,5 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2b3c4d5e6f708192a3b4c5d6e7f80102, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   updateButton: {fileID: 6243855843865757924}

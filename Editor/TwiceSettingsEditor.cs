@@ -15,7 +15,7 @@ namespace TwiceSDK.Editor
     [CustomEditor(typeof(TwiceSettings))]
     public class TwiceSettingsEditor : UnityEditor.Editor
     {
-        static bool _project = true, _init = true, _modules = true, _identity = true, _analytics = true, _remote = true, _env, _debug;
+        static bool _project = true, _init = true, _modules = true, _identity = true, _analytics = true, _remote = true, _rateus, _env, _debug;
         bool _fetching;
         string _lastResponse;
 
@@ -54,6 +54,7 @@ namespace TwiceSDK.Editor
                 Prop("enableVersionCheck", "Version Checker");
                 Prop("enableLeaderboards", "Leaderboards");
                 Prop("enablePushNotifications", "Notifications (Push)");
+                Prop("enableRateUs", "Rate Us");
                 EditorGUILayout.HelpBox("Kapalı bir modül init olmaz / ağ çağrısı yapmaz. Kullanmadığın modülü kapat.\nPush için ayrıca Firebase Messaging import edilmeli ve TWICE_FCM define eklenmeli.", MessageType.None);
             });
 
@@ -90,6 +91,44 @@ namespace TwiceSDK.Editor
 
                 if (string.IsNullOrEmpty(s.apiKey))
                     EditorGUILayout.HelpBox("Set the API Key above to fetch remote config.", MessageType.Info);
+            });
+
+            Section(ref _rateus, "Rate Us", () =>
+            {
+                Prop("rateUsMode", "Mode");
+                // Levels list drawn manually — a List's built-in foldout can't be nested inside a
+                // FoldoutHeaderGroup (Section), which is what threw the "can't nest foldout Headers" error.
+                var levels = serializedObject.FindProperty("rateUsLevels");
+                if (levels != null)
+                {
+                    EditorGUILayout.LabelField("Levels", "Rate Us göstermek istediğin level no'ları");
+                    EditorGUI.indentLevel++;
+                    int removeAt = -1;
+                    for (int i = 0; i < levels.arraySize; i++)
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        // No "Level N" prefix — the row index is not the value; just show the number field.
+                        EditorGUILayout.PropertyField(levels.GetArrayElementAtIndex(i), GUIContent.none);
+                        if (GUILayout.Button("Sil", GUILayout.Width(40))) removeAt = i;
+                        EditorGUILayout.EndHorizontal();
+                    }
+                    if (removeAt >= 0) levels.DeleteArrayElementAtIndex(removeAt);
+                    if (GUILayout.Button("+ Level ekle")) levels.arraySize++;
+                    EditorGUI.indentLevel--;
+                }
+                if (s.rateUsMode == RateUsMode.AskFirst)
+                {
+                    EditorGUILayout.HelpBox("Oyun kodundan TwiceRateUs.Show() çağır. 'Evet' → native review; 'Hayır' → kapanır.\n" +
+                        "AskFirst penceresi ayrı bir Canvas prefab'idir: Assets/TwiceSDK/Examples/Resources/TwiceRateUsPanel.prefab " +
+                        "(metinler dahil görünümü oradan düzenle; Show() çağrılınca runtime'da oluşturulur).", MessageType.None);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("Direct: TwiceRateUs.Show() doğrudan native review'ı açar (iOS SKStoreReviewController / Android Play In-App Review).", MessageType.None);
+                }
+                EditorGUILayout.HelpBox("Levels listesi yalnızca veridir; SDK otomatik kullanmaz. Oyun kodundan okuyup uygun level'da Show() çağırırsın.", MessageType.None);
+                EditorGUILayout.HelpBox("Android Play In-App Review kütüphanesi pakette gömülü gelir (TwiceReview.androidlib → com.google.android.play:review:2.0.1) ve " +
+                    "build sırasında otomatik eklenir; ayrıca bir şey yapmana gerek yok. Kütüphane bir sebeple yoksa Play Store sayfasına düşer.", MessageType.Info);
             });
 
             Section(ref _env, "Environment", () =>

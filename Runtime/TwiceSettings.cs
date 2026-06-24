@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace TwiceSDK
@@ -31,6 +32,15 @@ namespace TwiceSDK
         Production = 1,
         /// <summary>Always tag as sandbox (e.g. a dedicated TestFlight/internal build).</summary>
         Sandbox = 2,
+    }
+
+    /// <summary>How the Rate Us module asks for a review.</summary>
+    public enum RateUsMode
+    {
+        /// <summary>Show the native in-app review immediately (iOS SKStoreReviewController / Android Play In-App Review).</summary>
+        Direct = 0,
+        /// <summary>Ask "do you like the game?" first; only on "yes" go to the native review (no = just close).</summary>
+        AskFirst = 1,
     }
 
     /// <summary>
@@ -74,6 +84,18 @@ namespace TwiceSDK
                  "backend so the panel can send player campaigns. Requires Firebase Messaging imported AND the " +
                  "TWICE_FCM scripting define set (otherwise the push code is excluded and nothing happens). When off, no token is captured.")]
         public bool enablePushNotifications = true;
+
+        [Tooltip("Rate Us: native in-app review (iOS SKStoreReviewController / Android Play In-App Review), " +
+                 "optionally behind a 'do you like the game?' gate. Call TwiceRateUs.Show() from your game. When off, that call is a no-op.")]
+        public bool enableRateUs = true;
+
+        [Header("Rate Us")]
+        [Tooltip("Direct: show the native review immediately. AskFirst: ask 'do you like the game?' first — only 'yes' goes to the native review; 'no' just closes. AskFirst penceresinin metinleri prefab'te (Resources/TwiceRateUsPanel).")]
+        public RateUsMode rateUsMode = RateUsMode.AskFirst;
+
+        [Tooltip("Rate Us'u göstermek istediğin level numaraları. SDK bunu otomatik kullanmaz; oyun kodundan " +
+                 "okuyup uygun level'da TwiceRateUs.Show() çağırırsın (örn. if (settings.rateUsLevels.Contains(level)) TwiceRateUs.Show()).")]
+        public List<int> rateUsLevels = new List<int>();
 
         [Header("Identity")]
         [Tooltip("ON (default): the player id is the stable per-device identifier (iOS = vendor IDFV, " +

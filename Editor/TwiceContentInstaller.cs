@@ -60,7 +60,7 @@ namespace TwiceSDK.Editor
             {
                 AssetDatabase.Refresh();
                 Debug.Log("[TwiceSDK] İçerik kuruldu → " + DestRoot + " (" + copied + " dosya). " +
-                          "Bootstrap prefab: Assets/TwiceSDK/Prefabs/TwiceSDK.prefab — düzenlenebilir, prefab'i ilk sahnene sürükle.");
+                          "Bootstrap prefab: Assets/TwiceSDK/Examples/Prefabs/TwiceSDK.prefab — düzenlenebilir, prefab'i ilk sahnene sürükle.");
             }
         }
     }
