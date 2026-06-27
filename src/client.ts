@@ -231,7 +231,7 @@ export class TwiceClient {
 
         const result = await this.sendBatch(batch);
         if (result === 'ok' || result === 'drop') {
-          this.removeSent(batch.length, batch[0].sessionId);
+          this.removeSent(batch.length, batch[0]?.sessionId ?? '');
           void this.persistQueue();
           this.currentDelay = this.flushInterval;
         } else {
@@ -248,18 +248,20 @@ export class TwiceClient {
   /** Up to maxBatch leading events that share the first event's session id. */
   private takeBatch(): QueuedEvent[] {
     const batch: QueuedEvent[] = [];
-    if (this.queue.length === 0) return batch;
-    const sid = this.queue[0].sessionId;
+    const head = this.queue[0];
+    if (!head) return batch;
+    const sid = head.sessionId;
     for (let i = 0; i < this.queue.length && batch.length < this.maxBatch; i++) {
-      if (this.queue[i].sessionId !== sid) break;
-      batch.push(this.queue[i]);
+      const e = this.queue[i];
+      if (!e || e.sessionId !== sid) break;
+      batch.push(e);
     }
     return batch;
   }
 
   private removeSent(n: number, sessionId: string): void {
     let removed = 0;
-    while (removed < n && this.queue.length > 0 && this.queue[0].sessionId === sessionId) {
+    while (removed < n && this.queue[0]?.sessionId === sessionId) {
       this.queue.shift();
       removed++;
     }
@@ -300,7 +302,7 @@ export class TwiceClient {
 
   private buildBody(batch: QueuedEvent[]): string {
     const envelope: Record<string, unknown> = {
-      session_id: clampStr(batch[0].sessionId, 80),
+      session_id: clampStr(batch[0]?.sessionId ?? '', 80),
       user_id: clampStr(this.userId, 80),
       platform: this.platform,
       app_version: this.appVersion,
@@ -412,7 +414,7 @@ function sanitizeName(name: string): string {
   if (!name) return 'unnamed';
   let out = '';
   for (let i = 0; i < name.length && out.length < 64; i++) {
-    const c = name[i];
+    const c = name.charAt(i);
     out += /[A-Za-z0-9_.:-]/.test(c) ? c : '_';
   }
   return out.length === 0 ? 'unnamed' : out;
@@ -427,13 +429,16 @@ function normalizeType(type?: string | null): string {
 }
 
 function resolvePlatform(): string {
-  switch (Platform.OS) {
+  // Widen to `string` so the exhaustive case set doesn't narrow the default
+  // branch to `never` under strict settings.
+  const os: string = Platform.OS;
+  switch (os) {
     case 'ios': return 'iOS';
     case 'android': return 'Android';
     case 'macos': return 'macOS';
     case 'windows': return 'Windows';
     case 'web': return 'Web';
-    default: return Platform.OS ? String(Platform.OS) : 'Unknown';
+    default: return os ? String(os) : 'Unknown';
   }
 }
 
