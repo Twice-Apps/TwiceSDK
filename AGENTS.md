@@ -9,13 +9,17 @@ then `TwiceAnalytics.logEvent(...)` anywhere. Events are queued, batched, retrie
 offline. Works in Expo (managed + dev client) and bare RN on iOS/Android/Web.
 
 ## Install
+Not on npm yet — install from the repo's `react-expo` branch (the import name is still
+`@twiceapps/react-native`). Ships TS source; Metro transpiles it, no build step.
 ```bash
-npm install @twiceapps/react-native
+npm install github:Twice-Apps/TwiceSDK#react-expo
 # offline persistence (recommended):
 npx expo install @react-native-async-storage/async-storage
 ```
-If the project uses plain RN (not Expo), install async-storage with `npm install` and run pods
-on iOS (`cd ios && pod install`). The SDK works without async-storage (in-memory queue).
+Pin a commit for reproducibility: `github:Twice-Apps/TwiceSDK#<sha>`. If GitHub isn't reachable,
+clone the repo, `git checkout react-expo`, and `npm install ../TwiceSDK` by path. If the project
+uses bare RN, run pods on iOS (`cd ios && pod install`). The SDK works without async-storage
+(in-memory queue). Once published, this becomes `npm install @twiceapps/react-native`.
 
 ## Step 1 — Initialise once, early
 Put a single `Twice.init({ apiKey })` at app startup. The API key is the project's `X-App-Key`

@@ -9,11 +9,24 @@ on iOS / Android / Web. Dependency-light, no PII by default — privacy-safe (GD
 
 ## Install
 
+**Not on npm yet — install straight from the repo's `react-expo` branch** (no publish needed):
+
 ```bash
-npm install @twiceapps/react-native
-# or: yarn add @twiceapps/react-native
-# or: npx expo install @twiceapps/react-native
+npm install github:Twice-Apps/TwiceSDK#react-expo
+# yarn add github:Twice-Apps/TwiceSDK#react-expo
 ```
+
+Pin to an exact commit for reproducible builds (recommended for releases):
+
+```bash
+npm install github:Twice-Apps/TwiceSDK#<commit-sha>
+```
+
+To update later, re-run the install command (npm re-pulls the branch tip).
+
+> The package ships TypeScript source; Expo / React Native's Metro bundler transpiles it —
+> no build step. The import name stays `@twiceapps/react-native` (the package's name), e.g.
+> `import { Twice } from '@twiceapps/react-native'`.
 
 Recommended (so queued events survive an app restart):
 
@@ -23,6 +36,23 @@ npx expo install @react-native-async-storage/async-storage
 
 If AsyncStorage is not installed the SDK still works — it just keeps the queue in memory
 until the app is killed.
+
+<details>
+<summary>Other install methods (offline / no GitHub / once published)</summary>
+
+**Local clone (offline, or private network):**
+```bash
+git clone https://github.com/Twice-Apps/TwiceSDK.git
+git -C TwiceSDK checkout react-expo
+# then, from your app:
+npm install ../TwiceSDK            # installs the checked-out branch by path
+```
+
+**Vendor the source (zero packaging — always works):** copy the branch's `src/` folder into
+your app (e.g. `src/twice/`) and import locally: `import { Twice } from './twice'`.
+
+**Once published to npm:** `npm install @twiceapps/react-native`.
+</details>
 
 ## Quick start
 
