@@ -53,9 +53,38 @@ namespace TwiceSDK.Analytics
         public static void SetUserProperty(string key, object value) =>
             Guard(() => TwiceAnalyticsRunner.Instance?.SetUserProperty(key, value));
 
-        /// <summary>Log an arbitrary event with optional flat params (number/string/bool).</summary>
+        /// <summary>Log an arbitrary event with optional flat params (number/string/bool). Type defaults to "general".</summary>
         public static void LogEvent(string name, IDictionary<string, object> parameters = null) =>
             Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters));
+
+        /// <summary>Log an event with an explicit type/category ("debug" | "warning" | "error" | "purchase" | "ad" | "general").</summary>
+        public static void LogEvent(string name, string type, IDictionary<string, object> parameters) =>
+            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, type));
+
+        // ---- Typed log events (Debug / Warning / Error) ---------------------
+        // These tag the event with a "type" the backend dashboard filters/splits by.
+        // Use them for diagnostics; gameplay/business events use LogEvent / the presets.
+
+        /// <summary>Log a developer/diagnostic event (type "debug").</summary>
+        public static void DebugEvent(string name, IDictionary<string, object> parameters = null) =>
+            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "debug"));
+
+        /// <summary>Log a warning event (type "warning").</summary>
+        public static void WarningEvent(string name, IDictionary<string, object> parameters = null) =>
+            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "warning"));
+
+        /// <summary>Log an error event (type "error").</summary>
+        public static void ErrorEvent(string name, IDictionary<string, object> parameters = null) =>
+            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "error"));
+
+        /// <summary>Log an error from a caught exception — message, type and stack trace ride in params (type "error").</summary>
+        public static void ErrorEvent(string name, Exception exception, IDictionary<string, object> extra = null)
+        {
+            var p = exception == null
+                ? extra
+                : With(extra, ("message", exception.Message), ("exception", exception.GetType().Name), ("stack", exception.StackTrace));
+            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, p, "error"));
+        }
 
         // ---- Preset helpers -------------------------------------------------
 
@@ -76,7 +105,7 @@ namespace TwiceSDK.Analytics
         public static void ScreenView(string screen) => LogEvent("screen_view", With(null, "screen", screen));
 
         public static void Purchase(string productId, double price, string currency, IDictionary<string, object> extra = null) =>
-            LogEvent("purchase", With(extra, ("product_id", productId), ("price", price), ("currency", currency)));
+            LogEvent("purchase", "purchase", With(extra, ("product_id", productId), ("price", price), ("currency", currency)));
 
         /// <summary>
         /// Purchase with a human-readable product name (e.g. the App Store / Play
@@ -87,11 +116,11 @@ namespace TwiceSDK.Analytics
         {
             var p = With(extra, ("product_id", productId), ("price", price), ("currency", currency));
             if (!string.IsNullOrEmpty(productName)) p["product_name"] = productName;
-            LogEvent("purchase", p);
+            LogEvent("purchase", "purchase", p);
         }
 
         public static void AdWatched(string placement, IDictionary<string, object> extra = null) =>
-            LogEvent("ad_watched", With(extra, "placement", placement));
+            LogEvent("ad_watched", "ad", With(extra, "placement", placement));
 
         /// <summary>
         /// Impression-level ad revenue from a mediation callback (AppLovin MAX,
@@ -107,7 +136,7 @@ namespace TwiceSDK.Analytics
             var p = With(extra, ("revenue", revenue), ("network", string.IsNullOrEmpty(network) ? "unknown" : network));
             if (!string.IsNullOrEmpty(placement)) p["placement"] = placement;
             if (!string.IsNullOrEmpty(adFormat)) p["ad_format"] = adFormat;
-            LogEvent("ad_revenue", p);
+            LogEvent("ad_revenue", "ad", p);
         }
 
         public static void RewardClaimed(string reward, IDictionary<string, object> extra = null) =>
@@ -195,8 +224,13 @@ namespace TwiceSDK.Analytics
             public string sessionId;
             public long ts;
             public string name;
+            public string type;       // category: debug|warning|error|purchase|ad ("" = general, backend derives)
             public string paramsJson; // pre-serialized JSON object, "{}" when empty
         }
+
+        // Known event types/categories. An unknown/empty value is sent as no type and
+        // the backend derives "general" from the event name — so this never blocks an event.
+        static readonly string[] KnownTypes = { "debug", "warning", "error", "purchase", "ad", "general" };
 
         // config
         string _apiKey;
@@ -430,11 +464,12 @@ namespace TwiceSDK.Analytics
             }
         }
 
-        internal void Enqueue(string name, IDictionary<string, object> parameters)
+        internal void Enqueue(string name, IDictionary<string, object> parameters, string type = null)
         {
             if (!_consent) return;
 
             string clean = SanitizeName(name);
+            string cleanType = NormalizeType(type);
             // Merge user properties (event params win on key collision).
             IDictionary<string, object> merged = parameters;
             if (_userProps.Count > 0)
@@ -451,6 +486,7 @@ namespace TwiceSDK.Analytics
                 sessionId = _sessionId,
                 ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 name = clean,
+                type = cleanType,
                 paramsJson = json,
             };
 
@@ -628,6 +664,8 @@ namespace TwiceSDK.Analytics
                 var e = batch[i];
                 sb.Append("{\"event_id\":").Append(JsonConvert.ToString(e.eventId));
                 sb.Append(",\"name\":").Append(JsonConvert.ToString(e.name));
+                if (!string.IsNullOrEmpty(e.type))
+                    sb.Append(",\"type\":").Append(JsonConvert.ToString(e.type));
                 sb.Append(",\"ts\":").Append(e.ts.ToString(CultureInfo.InvariantCulture));
                 sb.Append(",\"params\":").Append(string.IsNullOrEmpty(e.paramsJson) ? "{}" : e.paramsJson);
                 sb.Append('}');
@@ -637,7 +675,9 @@ namespace TwiceSDK.Analytics
         }
 
         // ---- persistence (offline) -----------------------------------------
-        // Format: one event per line, TAB-separated: eventId \t sessionId \t ts \t name \t base64(paramsJson)
+        // Format: one event per line, TAB-separated:
+        //   eventId \t sessionId \t ts \t name \t type \t base64(paramsJson)
+        // (type may be empty). Older 5-col / 4-col lines load with type "".
 
         void PersistQueue()
         {
@@ -653,6 +693,7 @@ namespace TwiceSDK.Analytics
                       .Append(e.sessionId).Append('\t')
                       .Append(e.ts.ToString(CultureInfo.InvariantCulture)).Append('\t')
                       .Append(e.name).Append('\t')
+                      .Append(e.type ?? "").Append('\t')
                       .Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(e.paramsJson ?? "{}")))
                       .Append('\n');
                 }
@@ -691,16 +732,21 @@ namespace TwiceSDK.Analytics
                         if (string.IsNullOrEmpty(line)) continue;
                         var parts = line.Split('\t');
 
-                        string eventId, sessionId, name, b64;
+                        string eventId, sessionId, name, type, b64;
                         long ts;
-                        if (parts.Length == 5)
+                        if (parts.Length == 6) // current: eventId, sessionId, ts, name, type, b64
                         {
-                            eventId = parts[0]; sessionId = parts[1]; name = parts[3]; b64 = parts[4];
+                            eventId = parts[0]; sessionId = parts[1]; name = parts[3]; type = parts[4]; b64 = parts[5];
                             if (!long.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out ts)) continue;
                         }
-                        else if (parts.Length == 4) // legacy (eventId yoktu) → yenisini üret
+                        else if (parts.Length == 5) // pre-type: eventId, sessionId, ts, name, b64
                         {
-                            eventId = Guid.NewGuid().ToString("N"); sessionId = parts[0]; name = parts[2]; b64 = parts[3];
+                            eventId = parts[0]; sessionId = parts[1]; name = parts[3]; type = ""; b64 = parts[4];
+                            if (!long.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out ts)) continue;
+                        }
+                        else if (parts.Length == 4) // oldest (eventId yoktu) → yenisini üret; type yok
+                        {
+                            eventId = Guid.NewGuid().ToString("N"); sessionId = parts[0]; name = parts[2]; type = ""; b64 = parts[3];
                             if (!long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out ts)) continue;
                         }
                         else continue;
@@ -708,7 +754,7 @@ namespace TwiceSDK.Analytics
                         string json;
                         try { json = Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
                         catch { continue; }
-                        _queue.Add(new QueuedEvent { eventId = eventId, sessionId = sessionId, ts = ts, name = name, paramsJson = json });
+                        _queue.Add(new QueuedEvent { eventId = eventId, sessionId = sessionId, ts = ts, name = name, type = type, paramsJson = json });
                     }
                 }
                 Log($"Restored {lines.Length} persisted event line(s).");
@@ -836,6 +882,17 @@ namespace TwiceSDK.Analytics
                 if (sb.Length >= 64) break;
             }
             return sb.Length == 0 ? "unnamed" : sb.ToString();
+        }
+
+        // Maps a supplied type to a known category; returns "" for unknown OR "general"
+        // (an empty type is omitted from the payload and the backend derives the category).
+        static string NormalizeType(string type)
+        {
+            if (string.IsNullOrEmpty(type)) return "";
+            string t = type.Trim().ToLowerInvariant();
+            for (int i = 0; i < KnownTypes.Length; i++)
+                if (KnownTypes[i] == t) return t == "general" ? "" : t;
+            return "";
         }
 
         static string Clamp(string s, int max) => string.IsNullOrEmpty(s) ? s : (s.Length <= max ? s : s.Substring(0, max));

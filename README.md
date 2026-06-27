@@ -22,8 +22,8 @@ reproducible builds.
 1. `Assets → Create → Twice → SDK Settings`.
 2. Move the asset into a `Resources` folder, keep the name `TwiceSettings`
    (e.g. `Assets/Resources/TwiceSettings.asset`) so it auto-initialises at boot.
-3. Paste your game key (`X-App-Key`) into the `apiKey` field
-   (Twice admin → **Oyunlar** → your game → API anahtarı).
+3. Paste your project key (`X-App-Key`) into the `apiKey` field
+   (Twice admin → **Projeler** → your project → API anahtarı).
 
 > The settings asset (with your API key) lives in **your game**, never in this package.
 
@@ -38,6 +38,24 @@ TwiceAnalytics.Flush();
 ```
 Events carry an `event_id` (GUID) for idempotent at-least-once delivery, and an `env`
 (`sandbox`/`production`) tag derived automatically (Editor/Dev/TestFlight → sandbox).
+
+### Event types (Debug / Warning / Error / Purchase / Ad)
+Tag an event with a **type** the dashboard filters and splits by. Diagnostics use the typed
+log helpers; gameplay/business events use `LogEvent` or the presets (already typed).
+```csharp
+TwiceAnalytics.DebugEvent("checkpoint", new Dictionary<string, object> { { "where", "boss_intro" } });
+TwiceAnalytics.WarningEvent("low_memory");
+TwiceAnalytics.ErrorEvent("save_failed", new Dictionary<string, object> { { "slot", 2 } });
+
+try { Risky(); }
+catch (Exception ex) { TwiceAnalytics.ErrorEvent("unhandled", ex); } // message + stack ride along
+
+// Purchase / AdWatched / AdRevenue are auto-tagged "purchase" / "ad":
+TwiceAnalytics.Purchase("com.game.coins", 4.99, "USD");
+```
+Valid types: `debug`, `warning`, `error`, `purchase`, `ad`, `general` (default). Events sent
+without an explicit type are categorised by the backend from their name, so existing data is
+covered too.
 
 ## Remote Config
 Reads a per-game typed key-value store from the backend, caches it (offline + instant next
@@ -62,7 +80,7 @@ TwiceRemoteConfig.OnUpdated += () => ApplyConfig();
 // Manual refresh any time:
 TwiceRemoteConfig.Fetch(ok => Debug.Log("config v" + TwiceRemoteConfig.Version));
 ```
-Manage keys in Twice admin → **Oyunlar** → your game → **Remote Config**. Types: `string`,
+Manage keys in Twice admin → **Projeler** → your project → **Remote Config**. Types: `string`,
 `int`, `float`, `bool`, `json`.
 
 ## Namespaces

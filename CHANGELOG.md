@@ -3,6 +3,22 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-06-27
+### Added
+- **Typed events** (`TwiceAnalytics.DebugEvent` / `WarningEvent` / `ErrorEvent`): tag an event with a
+  category the backend dashboard filters and splits by. `ErrorEvent` has an overload that takes a
+  caught `Exception` and folds its message / type / stack trace into the params. New explicit-type
+  overload `LogEvent(name, type, params)` for advanced use. Valid types: `debug`, `warning`, `error`,
+  `purchase`, `ad`, `general` (default).
+- The `purchase` presets and the `AdWatched` / `AdRevenue` presets now auto-tag their events as
+  `purchase` / `ad` so they're categorised in the dashboard with no extra code.
+
+### Changed
+- The event wire format gains an optional per-event `type` field (omitted for general events; the
+  backend then derives the category from the event name, so existing data is categorised too).
+- Offline queue file format gained a `type` column (6 fields/line). Older 5-/4-field queues still
+  load (their events get an empty type). No action needed.
+
 ## [1.3.0] - 2026-06-21
 ### Added
 - **Players module** (`TwiceSDK.Players.TwicePlayers`): the public home for player identity & profile,

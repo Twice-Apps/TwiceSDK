@@ -30,7 +30,11 @@ namespace TwiceSDK.Editor
             "screen_view", "purchase", "ad_watched", "reward_claimed",
         };
 
+        // Event types the dashboard filters/splits by. "general" sends no explicit type.
+        static readonly string[] Types = { "general", "debug", "warning", "error", "purchase", "ad" };
+
         string _eventName = "level_completed";
+        int _typeIndex;
         readonly List<ParamRow> _params = new List<ParamRow>();
         Vector2 _scroll;
         bool _consentToggle = true;
@@ -108,6 +112,8 @@ namespace TwiceSDK.Editor
                     int picked = EditorGUILayout.Popup(-1, Presets);
                     if (picked >= 0) _eventName = Presets[picked];
                 }
+
+                _typeIndex = EditorGUILayout.Popup("Type", _typeIndex, Types);
 
                 EditorGUILayout.Space(2);
                 EditorGUILayout.LabelField("Params", EditorStyles.miniBoldLabel);
@@ -195,7 +201,10 @@ namespace TwiceSDK.Editor
                         break;
                 }
             }
-            TwiceAnalytics.LogEvent(_eventName, dict.Count > 0 ? dict : null);
+            var p = dict.Count > 0 ? dict : null;
+            string type = Types[_typeIndex];
+            if (type == "general") TwiceAnalytics.LogEvent(_eventName, p);
+            else TwiceAnalytics.LogEvent(_eventName, type, p);
         }
 
         static void Row(string label, string value)
