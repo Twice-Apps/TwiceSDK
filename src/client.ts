@@ -1,4 +1,5 @@
 import { AppState, AppStateStatus, Platform } from 'react-native';
+import { Core } from './core';
 import { Storage } from './storage';
 import { uuid } from './uuid';
 import { DebugInfo, EventParams, TwiceOptions } from './types';
@@ -71,6 +72,14 @@ export class TwiceClient {
     if (options.build != null) this.build = String(options.build);
     this.currentDelay = this.flushInterval;
 
+    // Publish config so the other modules (players/leaderboards/version/push) can read it.
+    Core.apiKey = this.apiKey;
+    Core.endpoint = this.endpoint;
+    Core.platform = this.platform;
+    Core.appVersion = this.appVersion;
+    Core.build = this.build;
+    Core.sandbox = this.isSandbox;
+
     if (this.configured) return; // reconfigure is idempotent — don't restart session/loops
     this.configured = true;
 
@@ -107,12 +116,17 @@ export class TwiceClient {
 
   setDisplayName(name: string): void {
     this.displayName = (name || '').trim();
+    Core.displayName = this.displayName;
     void Storage.set(DISPLAY_NAME_KEY, this.displayName);
     this.requestFlush();
   }
 
   getUserId(): string {
     return this.userId;
+  }
+
+  getDisplayName(): string {
+    return this.displayName;
   }
 
   /** Enqueue an event. `type` '' / unknown → general (backend derives). */
@@ -330,6 +344,9 @@ export class TwiceClient {
     if (dn) this.displayName = dn;
 
     await this.loadQueue();
+    Core.userId = this.userId;
+    Core.displayName = this.displayName;
+    Core.configured = true;
     this.identityReady = true;
   }
 

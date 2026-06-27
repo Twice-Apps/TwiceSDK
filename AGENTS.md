@@ -65,6 +65,26 @@ TwiceRemoteConfig.onUpdated(() => rerenderOrReapply());
 ```
 `Twice.init()` already initialises remote config (skip with `remoteConfig: false`).
 
+## Step 4 — Other modules (use as needed)
+All read config/identity from the initialised SDK — no separate init. Leaderboards / version
+check / push methods return Promises; await them.
+```ts
+import { TwicePlayers, TwiceLeaderboards, TwiceVersionCheck, TwicePush } from '@twiceapps/react-native';
+
+TwicePlayers.setDisplayName('Ada');                       // shows on leaderboards + admin
+await TwiceLeaderboards.submit('high_score', 1200);
+const top = await TwiceLeaderboards.getTop('high_score', 50);
+
+const s = await TwiceVersionCheck.check();                // forced/optional update gating
+if (s.isForced) { /* block UI */ } // open store: Linking.openURL(TwiceVersionCheck.storeUrl(s))
+
+// Push: app gets the token (expo-notifications), SDK registers it for the user:
+await TwicePush.register(deviceToken);
+```
+Module parity with Unity: Analytics, Remote Config, Players, Leaderboards, Version Check, Push.
+Monetization / Functions / operator Notifications / Settings are backend/dashboard features driven
+by events — there is no separate client API for them (same as Unity).
+
 ## Event naming conventions (follow these)
 - `snake_case`, lowercase, allowed chars `[a-z0-9_.:-]`, ≤ 64 chars.
 - Keep params **flat**: string / number / boolean only (no nested objects/arrays).
@@ -106,5 +126,11 @@ TwiceAnalytics.adWatched / adRevenue / rewardClaimed
 TwiceAnalytics.setConsent(bool) / setSandbox(bool) / setUserProperty(k,v) / setDisplayName(name) / getUserId()
 TwiceRemoteConfig.getBool/getInt/getFloat/getNumber/getString/getJson(key, fallback)
 TwiceRemoteConfig.fetch() / onUpdated(cb) / version
+TwicePlayers.userId / displayName / setDisplayName(name)
+await TwiceLeaderboards.submit(boardId, score, playerName?)
+await TwiceLeaderboards.getTop(boardId, count) / getMyRank(boardId) / getEntryCount(boardId)
+await TwiceLeaderboards.getTopBeforeReset(boardId, count) / getMyRankBeforeReset(boardId)
+await TwiceVersionCheck.check({platform?,version?,build?})  // → UpdateStatus; .storeUrl(status)
+await TwicePush.register(token, {platform?,env?}) / unregister(token)
 ```
 Options: `{ apiKey, endpointBaseUrl?, appVersion?, build?, platform?, sandbox?, flushIntervalSeconds?, maxBatchSize?, autoTrackSessions?, consent?, debug?, userId? }`.

@@ -104,6 +104,62 @@ TwiceRemoteConfig.fetch();                                      // manual refres
 `Twice.init()` initialises remote config automatically (pass `remoteConfig: false` to skip).
 Manage keys in Twice admin → **Projeler** → your project → **Remote Config**.
 
+## Players
+
+```ts
+import { TwicePlayers } from '@twiceapps/react-native';
+
+TwicePlayers.userId;                 // stable anonymous id (also stamped on every event)
+TwicePlayers.setDisplayName('Ada');  // shown on leaderboards + admin; rides the next batch
+TwicePlayers.displayName;            // "" if none
+```
+
+## Leaderboards
+
+Sort direction, aggregation (last/min/max/sum) and reset frequency are configured per board
+in the panel; the client just submits a score and reads the ranking. All methods return Promises.
+
+```ts
+import { TwiceLeaderboards } from '@twiceapps/react-native';
+
+await TwiceLeaderboards.submit('high_score', 1200, 'Ada');
+const top = await TwiceLeaderboards.getTop('high_score', 50);     // LeaderboardEntry[]
+const me  = await TwiceLeaderboards.getMyRank('high_score');      // { found, rank, value, total, name }
+const n   = await TwiceLeaderboards.getEntryCount('high_score');
+
+// Last archived period (after a reset):
+const prevTop = await TwiceLeaderboards.getTopBeforeReset('high_score', 50);
+```
+
+## Version check (forced / optional updates)
+
+```ts
+import { TwiceVersionCheck } from '@twiceapps/react-native';
+import { Linking } from 'react-native';
+
+const s = await TwiceVersionCheck.check(); // { action: 'none'|'optional'|'forced', appId, bundleId, ... }
+if (s.updateAvailable) {
+  // Show YOUR prompt (block input if s.isForced), then open the store:
+  Linking.openURL(TwiceVersionCheck.storeUrl(s));
+}
+```
+
+Configure the latest/minimum versions in Twice admin → **Projeler** → project → **Version Checker**.
+
+## Push registration
+
+Your app obtains the device token (e.g. `expo-notifications`) and hands it to the SDK, which
+stores it against the current user for operator/segment pushes.
+
+```ts
+import * as Notifications from 'expo-notifications';
+import { TwicePush } from '@twiceapps/react-native';
+
+const { data: token } = await Notifications.getDevicePushTokenAsync();
+await TwicePush.register(token);
+// on logout: await TwicePush.unregister(token);
+```
+
 ## Consent (GDPR / KVKK)
 
 ```ts

@@ -19,7 +19,14 @@ branch `react-expo`). The Unity SDK has its own changelog on `main`. Adheres to
   `screenView`, `purchase`, `adWatched`, `adRevenue`, `rewardClaimed`.
 - **Remote Config** (`TwiceRemoteConfig`): cached typed key-value with `getBool/getInt/getFloat/
   getNumber/getString/getJson`, `fetch()`, `onUpdated()`, and a `version`.
+- **Players** (`TwicePlayers`): `userId`, `displayName`, `setDisplayName`.
+- **Leaderboards** (`TwiceLeaderboards`): `submit`, `getTop`, `getMyRank`, `getEntryCount`, and the
+  archived-period variants `getTopBeforeReset` / `getMyRankBeforeReset` (Promise-based).
+- **Version check** (`TwiceVersionCheck`): `check()` → `{ action: none|optional|forced, appId,
+  bundleId, … }` for update gating, plus `storeUrl(status)`.
+- **Push** (`TwicePush`): `register(token)` / `unregister(token)` — register a device push token
+  (from `expo-notifications`) for operator/segment pushes.
 - **Consent** (`setConsent`), runtime sandbox override (`setSandbox`), user properties
   (`setUserProperty`), display name (`setDisplayName`), and `Twice.init()` one-call setup.
 - Ships TypeScript source (Metro/Expo transpiles it); full type definitions; `AGENTS.md`
-  integration guide for AI assistants.
+  integration guide for AI assistants. Client-module parity with the Unity SDK.
