@@ -1,11 +1,12 @@
-# Unity package repo — only package sources are tracked.
-# (No Library/Temp/obj here; those belong to consuming Unity projects.)
+# React Native / Expo SDK (branch: react-expo)
+# Build output
+lib/
+
+# Dependencies
+node_modules/
+
+# Logs / misc
+npm-debug.log*
+yarn-error.log*
+*.tgz
 .DS_Store
-*.tmp
-*.user
-*.csproj
-*.sln
-obj/
-Temp/
-Library/
-Logs/

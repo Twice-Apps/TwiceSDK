@@ -1,23 +1,51 @@
 {
-  "name": "co.twiceapps.sdk",
-  "version": "1.4.0",
-  "displayName": "Twice SDK",
-  "description": "Lightweight, dependency-free SDK for the Twice backend: analytics (events, sessions, revenue) + remote config (typed key-value, PlayFab Title-Data style). Drop-in, privacy-safe, works on iOS/Android/WebGL/Windows/macOS/Editor.",
-  "unity": "2021.3",
-  "dependencies": {
-    "com.unity.nuget.newtonsoft-json": "3.2.1",
-    "com.unity.mobile.notifications": "2.3.2"
-  },
-  "author": {
-    "name": "Twice Apps",
-    "email": "info@twiceapps.co",
-    "url": "https://www.twiceapps.co"
+  "name": "@twiceapps/react-native",
+  "version": "1.0.0",
+  "description": "Twice SDK for React Native & Expo — analytics (events, sessions, revenue, typed Debug/Warning/Error events) + remote config for the Twice backend. Dependency-light and privacy-safe (GDPR/KVKK).",
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "README.md",
+    "AGENTS.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "analytics",
     "telemetry",
     "events",
     "remote-config",
+    "react-native",
+    "expo",
     "twice"
-  ]
+  ],
+  "author": {
+    "name": "Twice Apps",
+    "email": "info@twiceapps.co",
+    "url": "https://www.twiceapps.co"
+  },
+  "license": "MIT",
+  "homepage": "https://www.twiceapps.co",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Twice-Apps/TwiceSDK.git"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "@react-native-async-storage/async-storage": "*"
+  },
+  "peerDependenciesMeta": {
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
 }

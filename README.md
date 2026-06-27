@@ -1,107 +1,165 @@
-# Twice SDK — Unity
+# Twice SDK — React Native & Expo
 
-Lightweight SDK for the Twice backend: **analytics** (events, sessions,
-revenue) + **remote config** (typed key-value, PlayFab Title-Data style).
-Works on **iOS, Android, WebGL, Windows, macOS and the Unity Editor**. No threads,
-no PII — drop-in and privacy-safe (GDPR/KVKK). Requires **Unity 2021.3 LTS+** and
-**Newtonsoft.Json** (`com.unity.nuget.newtonsoft-json`, installed automatically as a package dependency).
+Lightweight SDK for the [Twice](https://www.twiceapps.co) backend: **analytics**
+(events, sessions, revenue, typed Debug/Warning/Error events) + **remote config**
+(typed key-value). Works in **Expo** (managed + dev client) and **bare React Native**
+on iOS / Android / Web. Dependency-light, no PII by default — privacy-safe (GDPR/KVKK).
 
-## Install (UPM via Git URL)
-Unity → `Window → Package Manager → + → Add package from git URL…`:
+> This is the React Native / Expo SDK. The Unity SDK lives on the `main` branch of the same repo.
+
+## Install
+
+```bash
+npm install @twiceapps/react-native
+# or: yarn add @twiceapps/react-native
+# or: npx expo install @twiceapps/react-native
 ```
-https://github.com/Twice-Apps/TwiceSDK.git
+
+Recommended (so queued events survive an app restart):
+
+```bash
+npx expo install @react-native-async-storage/async-storage
 ```
-Or add to `Packages/manifest.json`:
-```json
-"co.twiceapps.sdk": "https://github.com/Twice-Apps/TwiceSDK.git"
+
+If AsyncStorage is not installed the SDK still works — it just keeps the queue in memory
+until the app is killed.
+
+## Quick start
+
+Initialise once, as early as possible (e.g. in your root `App` component):
+
+```tsx
+import { useEffect } from 'react';
+import { Twice, TwiceAnalytics } from '@twiceapps/react-native';
+
+export default function App() {
+  useEffect(() => {
+    Twice.init({ apiKey: 'tw_xxxxxxxx' }); // Twice admin → Projeler → your project → API anahtarı
+  }, []);
+
+  // ...later, anywhere:
+  // TwiceAnalytics.logEvent('app_open');
+  // TwiceAnalytics.screenView('Home');
+}
 ```
-This pulls the latest commit. Once you tag releases you can pin a version (e.g. `#1.0.0`) for
-reproducible builds.
 
-## Setup
-1. `Assets → Create → Twice → SDK Settings`.
-2. Move the asset into a `Resources` folder, keep the name `TwiceSettings`
-   (e.g. `Assets/Resources/TwiceSettings.asset`) so it auto-initialises at boot.
-3. Paste your project key (`X-App-Key`) into the `apiKey` field
-   (Twice admin → **Projeler** → your project → API anahtarı).
+That's it. The SDK auto-tracks `session_start` / `session_end`, batches events, retries with
+backoff, and tags events `sandbox` in dev (`__DEV__`) / `production` in release builds.
 
-> The settings asset (with your API key) lives in **your game**, never in this package.
+## Logging events
 
-## Analytics
-```csharp
-using TwiceSDK.Analytics;
+```ts
+import { TwiceAnalytics } from '@twiceapps/react-native';
 
-TwiceAnalytics.SetConsent(true);
-TwiceAnalytics.LevelCompleted("1-3", score: 1200, duration: 42.5f);
-TwiceAnalytics.LogEvent("boss_defeated", new Dictionary<string, object> { { "boss", "golem" }, { "tries", 3 } });
-TwiceAnalytics.Flush();
+// Custom event with flat params:
+TwiceAnalytics.logEvent('boss_defeated', { boss: 'golem', tries: 3 });
+
+// Presets:
+TwiceAnalytics.levelCompleted('1-3', { score: 1200, duration: 42.5 });
+TwiceAnalytics.screenView('Shop');
+TwiceAnalytics.purchase('com.game.coins', 4.99, 'USD');      // auto type: "purchase"
+TwiceAnalytics.adRevenue(0.012, 'applovin', { adFormat: 'rewarded' }); // auto type: "ad"
 ```
-Events carry an `event_id` (GUID) for idempotent at-least-once delivery, and an `env`
-(`sandbox`/`production`) tag derived automatically (Editor/Dev/TestFlight → sandbox).
 
-### Event types (Debug / Warning / Error / Purchase / Ad)
-Tag an event with a **type** the dashboard filters and splits by. Diagnostics use the typed
-log helpers; gameplay/business events use `LogEvent` or the presets (already typed).
-```csharp
-TwiceAnalytics.DebugEvent("checkpoint", new Dictionary<string, object> { { "where", "boss_intro" } });
-TwiceAnalytics.WarningEvent("low_memory");
-TwiceAnalytics.ErrorEvent("save_failed", new Dictionary<string, object> { { "slot", 2 } });
+Keep params **flat** (string / number / boolean) — like GA4 / GameAnalytics.
 
-try { Risky(); }
-catch (Exception ex) { TwiceAnalytics.ErrorEvent("unhandled", ex); } // message + stack ride along
+## Event types (Debug / Warning / Error / Purchase / Ad)
 
-// Purchase / AdWatched / AdRevenue are auto-tagged "purchase" / "ad":
-TwiceAnalytics.Purchase("com.game.coins", 4.99, "USD");
+Every event has a **type** the Twice dashboard filters and splits by. Diagnostics use the typed
+helpers; gameplay/business events use `logEvent` or the presets (already typed).
+
+```ts
+TwiceAnalytics.debugEvent('checkpoint', { where: 'boss_intro' });
+TwiceAnalytics.warningEvent('low_memory');
+TwiceAnalytics.errorEvent('save_failed', { slot: 2 });
+
+try {
+  risky();
+} catch (e) {
+  TwiceAnalytics.errorEvent('unhandled', e as Error); // message + stack ride along
+}
+
+// Explicit type on a custom event:
+TwiceAnalytics.logEvent('payment_declined', 'error', { code: 'insufficient_funds' });
 ```
+
 Valid types: `debug`, `warning`, `error`, `purchase`, `ad`, `general` (default). Events sent
-without an explicit type are categorised by the backend from their name, so existing data is
-covered too.
+without an explicit type are categorised by the backend from their name, so nothing is lost.
 
-## Remote Config
-Reads a per-game typed key-value store from the backend, caches it (offline + instant next
-launch), and bumps a `version` so the client only changes when the config does.
+## Remote config
 
-```csharp
-using TwiceSDK.RemoteConfig;
+Per-project typed key-value, cached offline (instant next launch), with a `version` bump.
 
-// Auto-fetched at boot (toggle on the settings asset). Read with safe defaults:
-bool   adsOn  = TwiceRemoteConfig.GetBool("ads_enabled", true);
-int    coins  = TwiceRemoteConfig.GetInt("coins_per_level", 50);
-float  price  = TwiceRemoteConfig.GetFloat("hint_price", 250f);
-string minVer = TwiceRemoteConfig.GetString("min_version", "1.0.0");
+```ts
+import { TwiceRemoteConfig } from '@twiceapps/react-native';
 
-// Nested json value → your POCO / class (parsed with Newtonsoft):
-public class GameSettings { public int adFreeUntilLevel; public int adReward; }
-GameSettings gs = TwiceRemoteConfig.GetJson<GameSettings>("GameSettings");
+const adsOn = TwiceRemoteConfig.getBool('ads_enabled', true);
+const coins = TwiceRemoteConfig.getInt('coins_per_level', 50);
+const title = TwiceRemoteConfig.getString('promo_title', '');
 
-// Re-apply when a fresh config arrives:
-TwiceRemoteConfig.OnUpdated += () => ApplyConfig();
-
-// Manual refresh any time:
-TwiceRemoteConfig.Fetch(ok => Debug.Log("config v" + TwiceRemoteConfig.Version));
+const unsub = TwiceRemoteConfig.onUpdated(() => applyConfig()); // re-apply on fresh config
+TwiceRemoteConfig.fetch();                                      // manual refresh
 ```
-Manage keys in Twice admin → **Projeler** → your project → **Remote Config**. Types: `string`,
-`int`, `float`, `bool`, `json`.
 
-## Namespaces
-- `TwiceSDK` — shared settings (`TwiceSettings`, `EnvironmentMode`).
-- `TwiceSDK.Analytics` — `TwiceAnalytics`.
-- `TwiceSDK.RemoteConfig` — `TwiceRemoteConfig`.
+`Twice.init()` initialises remote config automatically (pass `remoteConfig: false` to skip).
+Manage keys in Twice admin → **Projeler** → your project → **Remote Config**.
 
-## Adapting to a game (bridge pattern)
-This package is **game-agnostic** — it only exposes the `TwiceAnalytics.*` / `TwiceRemoteConfig.*`
-API. Each game writes a small **bridge** (in the game project, *not* here) that forwards that
-game's own events (level system, IAP, ads) to `TwiceAnalytics` and applies config values from
-`TwiceRemoteConfig`. Game-specific dependencies (RevenueCat, AppLovin, etc.) stay in the game.
+## Consent (GDPR / KVKK)
 
-## Editor debugger
-`Twice → Analytics Debugger` — compose/fire events, toggle consent, watch the live queue and last
-server status while in Play Mode. Editor-only; never ships with a build.
+```ts
+TwiceAnalytics.setConsent(false); // pause + clear the queue
+TwiceAnalytics.setConsent(true);  // resume
+```
 
-## Backend
-- `POST {endpointBaseUrl}/sdk/events` — headers `X-App-Key` + `Content-Type: application/json`.
-- `GET  {endpointBaseUrl}/sdk/config`  — header `X-App-Key`; returns `{ ok, version, config }`.
+Start opted-out with `Twice.init({ apiKey, consent: false })` and flip it once the user agrees.
 
-## Versioning
-Public `TwiceAnalytics.*` / `TwiceRemoteConfig.*` methods are the API contract. Changes follow
-[SemVer](https://semver.org/); see `CHANGELOG.md`.
+## Options
+
+| Option | Default | Description |
+|---|---|---|
+| `apiKey` (required) | — | Project key (`X-App-Key`). |
+| `endpointBaseUrl` | `https://www.twiceapps.co/api/v1` | Backend base URL. |
+| `appVersion` | auto (expo-constants) | Marketing version. |
+| `build` | — | iOS CFBundleVersion / Android versionCode. |
+| `platform` | `Platform.OS` mapped | `iOS` / `Android` / `Web` / … |
+| `sandbox` | `__DEV__` | Force sandbox/production tagging. |
+| `flushIntervalSeconds` | `15` | Auto-flush cadence. |
+| `maxBatchSize` | `20` | Events per network batch. |
+| `autoTrackSessions` | `true` | Auto `session_start` / `session_end`. |
+| `consent` | `true` | Start collecting (set `false` to require opt-in). |
+| `debug` | `false` | Verbose SDK console logs. |
+| `userId` | persisted random id | Override the anonymous user id. |
+
+## Identity & privacy
+
+The user id is an anonymous random id persisted on the device (via AsyncStorage). The SDK
+does **not** collect the IDFA/advertising id or raw IP. Country (2-letter) is derived
+server-side from the request and stored without the IP. Disclose analytics use in your
+privacy text. Pass your own `userId` to align with your auth system.
+
+## For AI assistants
+
+Adding Twice to a project? See **[AGENTS.md](./AGENTS.md)** — copy-paste integration steps,
+patterns, and pitfalls written for AI coding agents.
+
+## Backend / wire format
+
+`POST {endpointBaseUrl}/sdk/events` (header `X-App-Key`):
+
+```jsonc
+{
+  "session_id": "…", "user_id": "…", "platform": "iOS", "app_version": "1.2.0",
+  "env": "production",
+  "events": [
+    { "event_id": "hex", "name": "level_completed", "type": "general", "ts": 1718450000,
+      "params": { "level": "1-3", "score": 1200 } }
+  ]
+}
+```
+
+`GET {endpointBaseUrl}/sdk/config` (header `X-App-Key`) → `{ ok, version, config }`.
+Identical contract to the Unity SDK, so both feed the same dashboards.
+
+## License
+
+MIT.
