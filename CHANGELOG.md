@@ -3,6 +3,15 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-06-28
+### Added
+- **Subscription lifecycle** helpers: `TwiceAnalytics.TrialStarted(productId, productName?, currency?)`,
+  `SubscriptionRenewed(productId, price, currency, productName?)`, and
+  `SubscriptionCancelled(productId, productName?)`. They are sent as `purchase` events carrying a
+  `tx_type` param (`trial` / `renewal` / `cancellation`). **Trials and cancellations carry no
+  revenue** — the dashboard counts only `purchase` and `renewal` toward revenue, so a free trial no
+  longer looks like a paid sale. Plain `Purchase(...)` is unchanged (implicit `tx_type=purchase`).
+
 ## [1.4.0] - 2026-06-27
 ### Added
 - **Typed events** (`TwiceAnalytics.DebugEvent` / `WarningEvent` / `ErrorEvent`): tag an event with a

@@ -119,6 +119,40 @@ namespace TwiceSDK.Analytics
             LogEvent("purchase", "purchase", p);
         }
 
+        /// <summary>
+        /// A free trial started. Sent as a purchase with tx_type="trial" — a
+        /// subscription signal that carries NO revenue (the dashboard zeroes it).
+        /// </summary>
+        public static void TrialStarted(string productId, string productName = "", string currency = "", IDictionary<string, object> extra = null)
+        {
+            var p = With(extra, ("product_id", productId), ("tx_type", "trial"));
+            if (!string.IsNullOrEmpty(productName)) p["product_name"] = productName;
+            if (!string.IsNullOrEmpty(currency)) p["currency"] = currency;
+            LogEvent("purchase", "purchase", p);
+        }
+
+        /// <summary>
+        /// A subscription renewed (the user was charged again). Sent as a purchase
+        /// with tx_type="renewal" — counts as revenue, like the initial purchase.
+        /// </summary>
+        public static void SubscriptionRenewed(string productId, double price, string currency, string productName = "", IDictionary<string, object> extra = null)
+        {
+            var p = With(extra, ("product_id", productId), ("price", price), ("currency", currency), ("tx_type", "renewal"));
+            if (!string.IsNullOrEmpty(productName)) p["product_name"] = productName;
+            LogEvent("purchase", "purchase", p);
+        }
+
+        /// <summary>
+        /// A subscription was cancelled / will not renew. Sent as a purchase with
+        /// tx_type="cancellation" — a churn signal, NOT revenue.
+        /// </summary>
+        public static void SubscriptionCancelled(string productId, string productName = "", IDictionary<string, object> extra = null)
+        {
+            var p = With(extra, ("product_id", productId), ("tx_type", "cancellation"));
+            if (!string.IsNullOrEmpty(productName)) p["product_name"] = productName;
+            LogEvent("purchase", "purchase", p);
+        }
+
         public static void AdWatched(string placement, IDictionary<string, object> extra = null) =>
             LogEvent("ad_watched", "ad", With(extra, "placement", placement));
 

@@ -52,6 +52,11 @@ catch (Exception ex) { TwiceAnalytics.ErrorEvent("unhandled", ex); } // message 
 
 // Purchase / AdWatched / AdRevenue are auto-tagged "purchase" / "ad":
 TwiceAnalytics.Purchase("com.game.coins", 4.99, "USD");
+
+// Subscriptions: trials & cancellations carry NO revenue; only purchase/renewal do.
+TwiceAnalytics.TrialStarted("com.game.pro.weekly", "Pro Weekly");
+TwiceAnalytics.SubscriptionRenewed("com.game.pro.weekly", 4.99, "USD", "Pro Weekly");
+TwiceAnalytics.SubscriptionCancelled("com.game.pro.weekly", "Pro Weekly");
 ```
 Valid types: `debug`, `warning`, `error`, `purchase`, `ad`, `general` (default). Events sent
 without an explicit type are categorised by the backend from their name, so existing data is
