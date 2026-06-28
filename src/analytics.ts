@@ -53,6 +53,12 @@ export interface TwiceAnalyticsApi {
   screenView(screen: string): void;
   /** Auto-tagged type "purchase". `price` is the local price; `currency` an ISO code (e.g. "USD"). */
   purchase(productId: string, price: number, currency: string, extra?: EventParams): void;
+  /** A free trial started. Sent as a "purchase" with tx_type "trial" — carries NO revenue. */
+  trialStarted(productId: string, opts?: { productName?: string; currency?: string }, extra?: EventParams): void;
+  /** A subscription renewed (the user was charged again). tx_type "renewal" — counts as revenue. */
+  subscriptionRenewed(productId: string, price: number, currency: string, opts?: { productName?: string }, extra?: EventParams): void;
+  /** A subscription was cancelled / will not renew. tx_type "cancellation" — a churn signal, NO revenue. */
+  subscriptionCancelled(productId: string, opts?: { productName?: string }, extra?: EventParams): void;
   /** Auto-tagged type "ad". */
   adWatched(placement: string, extra?: EventParams): void;
   /** Impression-level ad revenue in USD (mediation reports USD). Auto-tagged type "ad". */
@@ -131,6 +137,22 @@ export const TwiceAnalytics: TwiceAnalyticsApi = {
   },
   purchase(productId: string, price: number, currency: string, extra?: EventParams): void {
     client().enqueue('purchase', withExtra({ product_id: productId, price, currency }, extra), 'purchase');
+  },
+  trialStarted(productId: string, opts?: { productName?: string; currency?: string }, extra?: EventParams): void {
+    const base: EventParams = { product_id: productId, tx_type: 'trial' };
+    if (opts && opts.productName) base.product_name = opts.productName;
+    if (opts && opts.currency) base.currency = opts.currency;
+    client().enqueue('purchase', withExtra(base, extra), 'purchase');
+  },
+  subscriptionRenewed(productId: string, price: number, currency: string, opts?: { productName?: string }, extra?: EventParams): void {
+    const base: EventParams = { product_id: productId, price, currency, tx_type: 'renewal' };
+    if (opts && opts.productName) base.product_name = opts.productName;
+    client().enqueue('purchase', withExtra(base, extra), 'purchase');
+  },
+  subscriptionCancelled(productId: string, opts?: { productName?: string }, extra?: EventParams): void {
+    const base: EventParams = { product_id: productId, tx_type: 'cancellation' };
+    if (opts && opts.productName) base.product_name = opts.productName;
+    client().enqueue('purchase', withExtra(base, extra), 'purchase');
   },
   adWatched(placement: string, extra?: EventParams): void {
     client().enqueue('ad_watched', withExtra({ placement }, extra), 'ad');
