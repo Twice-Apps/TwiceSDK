@@ -201,10 +201,10 @@ namespace TwiceSDK.Editor
                         break;
                 }
             }
-            var p = dict.Count > 0 ? dict : null;
+            var composed = dict.Count > 0 ? dict : null;
             string type = Types[_typeIndex];
-            if (type == "general") TwiceAnalytics.LogEvent(_eventName, p);
-            else TwiceAnalytics.LogEvent(_eventName, type, p);
+            if (type == "general") TwiceAnalytics.LogEvent(_eventName, composed);
+            else TwiceAnalytics.LogEvent(_eventName, type, composed);
         }
 
         static void Row(string label, string value)
