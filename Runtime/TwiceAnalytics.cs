@@ -445,7 +445,13 @@ namespace TwiceSDK.Analytics
         void EndSession()
         {
             if (!_autoTrackSessions) return;
+            // A session that never started has nothing to report. Without this guard a default
+            // _sessionStartUtc (year 1) yields a ~2000-year duration that poisons every
+            // all-time playtime average on the dashboard.
+            if (_sessionStartUtc == default(DateTime)) return;
             double duration = (DateTime.UtcNow - _sessionStartUtc).TotalSeconds;
+            if (duration < 0) duration = 0;                 // device clock jumped backwards
+            else if (duration > 86400) duration = 86400;    // cap at 24h — longer is corrupt state
             Enqueue("session_end", new Dictionary<string, object> { { "duration", Math.Round(duration, 2) } });
         }
 
