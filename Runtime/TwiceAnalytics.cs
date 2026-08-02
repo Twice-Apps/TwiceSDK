@@ -284,6 +284,12 @@ namespace TwiceSDK.Analytics
         string _appVersion;
         string _buildNumber; // owned by TwiceVersionChecker; cached here for the event envelope
         DateTime _sessionStartUtc;
+        // Foreground-only playtime: time spent in the background must NOT count toward session
+        // duration (wall-clock measurement used to report multi-hour "sessions" when the player
+        // pocketed the phone; short <30min background gaps inflated durations too).
+        double _activeSeconds;
+        DateTime _foregroundStartUtc;
+        bool _inForeground = true;
         DateTime? _backgroundSinceUtc;
 
         // state
@@ -432,6 +438,9 @@ namespace TwiceSDK.Analytics
         {
             _sessionId = Guid.NewGuid().ToString("N");
             _sessionStartUtc = DateTime.UtcNow;
+            _activeSeconds = 0;
+            _foregroundStartUtc = DateTime.UtcNow;
+            _inForeground = true;
             if (logStart)
                 Enqueue("session_start", new Dictionary<string, object>
                 {
@@ -449,7 +458,12 @@ namespace TwiceSDK.Analytics
             // _sessionStartUtc (year 1) yields a ~2000-year duration that poisons every
             // all-time playtime average on the dashboard.
             if (_sessionStartUtc == default(DateTime)) return;
-            double duration = (DateTime.UtcNow - _sessionStartUtc).TotalSeconds;
+            // Foreground-only: banked stretches + the current one (if still in the foreground).
+            double duration = _activeSeconds;
+            if (_inForeground)
+            {
+                duration += Math.Max(0, (DateTime.UtcNow - _foregroundStartUtc).TotalSeconds);
+            }
             if (duration < 0) duration = 0;                 // device clock jumped backwards
             else if (duration > 86400) duration = 86400;    // cap at 24h — longer is corrupt state
             Enqueue("session_end", new Dictionary<string, object> { { "duration", Math.Round(duration, 2) } });
@@ -808,19 +822,32 @@ namespace TwiceSDK.Analytics
         {
             if (paused)
             {
+                // Bank the foreground stretch that just ended; background time is never counted.
+                if (_inForeground)
+                {
+                    _activeSeconds += Math.Max(0, (DateTime.UtcNow - _foregroundStartUtc).TotalSeconds);
+                    _inForeground = false;
+                }
                 _backgroundSinceUtc = DateTime.UtcNow;
                 PersistQueue();
                 RequestFlush();
             }
-            else if (_backgroundSinceUtc.HasValue)
+            else
             {
-                double mins = (DateTime.UtcNow - _backgroundSinceUtc.Value).TotalMinutes;
-                _backgroundSinceUtc = null;
-                if (mins >= NewSessionAfterMinutes)
+                // New foreground stretch starts NOW (before any session rollover below, so the
+                // ending session gets ~0 extra and the fresh stretch belongs to the new session).
+                _foregroundStartUtc = DateTime.UtcNow;
+                _inForeground = true;
+                if (_backgroundSinceUtc.HasValue)
                 {
-                    EndSession();
-                    StartNewSession(logStart: _autoTrackSessions);
-                    Log($"Resumed after {mins:0} min — started a new session.");
+                    double mins = (DateTime.UtcNow - _backgroundSinceUtc.Value).TotalMinutes;
+                    _backgroundSinceUtc = null;
+                    if (mins >= NewSessionAfterMinutes)
+                    {
+                        EndSession();
+                        StartNewSession(logStart: _autoTrackSessions);
+                        Log($"Resumed after {mins:0} min — started a new session.");
+                    }
                 }
             }
         }
