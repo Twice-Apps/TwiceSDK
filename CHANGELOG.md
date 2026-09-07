@@ -3,6 +3,23 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-09-03
+### Added
+- **A/B experiments** on top of Remote Config. The config fetch now identifies the player
+  (`X-User-Id`, plus `X-First-Open` = unix time of the first launch, stamped once), so the backend
+  can layer the running experiment's variant values over the base config. The response may carry
+  an `experiment` block (`{ id, variant, rev, source }` or `null`); it is cached next to the config.
+- `TwiceRemoteConfig.Experiment` / `ExperimentId` / `Variant` and the `OnExperimentChanged` event.
+- The SDK stamps `ab_group` (`"experiment:variant"`), `experiment_id` and `variant_id` as user
+  properties on every analytics event — restored from cache at boot, so `app_open` /
+  `session_start` carry them on later launches — and logs an `experiment_assigned` event
+  (`experiment_id`, `variant`, `prev_variant`, `source`) whenever the assignment changes.
+- `TwiceAnalytics.RemoveUserProperty(key)`.
+
+### Changed
+- Config responses without an `experiment` key (backend without experiments, or no user id) behave
+  exactly as before; nothing changes for games that never start an experiment.
+
 ## [1.5.0] - 2026-06-28
 ### Added
 - **Subscription lifecycle** helpers: `TwiceAnalytics.TrialStarted(productId, productName?, currency?)`,

@@ -6,6 +6,7 @@ using UnityEngine.Networking;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TwiceSDK;
+using TwiceSDK.Analytics;
 
 namespace TwiceSDK.RemoteConfig
 {
@@ -36,6 +37,28 @@ namespace TwiceSDK.RemoteConfig
         {
             add { TwiceRemoteConfigRunner.EnsureExists(); TwiceRemoteConfigRunner.Instance.Updated += value; }
             remove { if (TwiceRemoteConfigRunner.Instance != null) TwiceRemoteConfigRunner.Instance.Updated -= value; }
+        }
+
+        // ---- A/B experiments --------------------------------------------------
+        // The backend layers the running experiment's variant values on top of the base config
+        // for players it can identify (X-User-Id). The assignment is cached with the config, the
+        // ab_group / experiment_id / variant_id user properties are stamped on every analytics
+        // event, and an `experiment_assigned` event is logged whenever the assignment changes.
+
+        /// <summary>The A/B assignment from the last config fetch (cached across launches), or null when not in an experiment.</summary>
+        public static ExperimentAssignment Experiment => Inst()?.Experiment;
+
+        /// <summary>Experiment id the player is enrolled in, "" if none.</summary>
+        public static string ExperimentId => Inst()?.Experiment?.id ?? "";
+
+        /// <summary>Variant key ("A", "B", …) the player is enrolled in, "" if none.</summary>
+        public static string Variant => Inst()?.Experiment?.variant ?? "";
+
+        /// <summary>Fired when the assignment changes: enrolled, moved to another variant, or the experiment ended (null).</summary>
+        public static event Action<ExperimentAssignment> OnExperimentChanged
+        {
+            add { TwiceRemoteConfigRunner.EnsureExists(); TwiceRemoteConfigRunner.Instance.ExperimentChanged += value; }
+            remove { if (TwiceRemoteConfigRunner.Instance != null) TwiceRemoteConfigRunner.Instance.ExperimentChanged -= value; }
         }
 
         /// <summary>Optional manual init (skip if a TwiceSettings asset is in Resources).</summary>
@@ -87,10 +110,13 @@ namespace TwiceSDK.RemoteConfig
         int _version;
         bool _loaded;
         JObject _config; // the "config" object from the backend, or null
+        ExperimentAssignment _experiment; // A/B assignment from the last fetch (persisted), or null
 
         internal int Version => _version;
         internal bool Loaded => _loaded;
+        internal ExperimentAssignment Experiment => _experiment;
         internal event Action Updated;
+        internal event Action<ExperimentAssignment> ExperimentChanged;
 
         // ---- bootstrap ------------------------------------------------------
 
@@ -120,6 +146,7 @@ namespace TwiceSDK.RemoteConfig
         void LoadCache()
         {
             _version = PlayerPrefs.GetInt(VersionKey, 0);
+            _experiment = TwiceExperimentState.Load(); // survives offline launches, like the config itself
             string raw = PlayerPrefs.GetString(CacheKey, "");
             if (string.IsNullOrEmpty(raw)) return;
             try { _config = JObject.Parse(raw); _loaded = true; }
@@ -161,6 +188,16 @@ namespace TwiceSDK.RemoteConfig
             using (var req = UnityWebRequest.Get(url))
             {
                 req.SetRequestHeader("X-App-Key", _apiKey);
+                // Identify the player so the backend can layer the running A/B experiment's variant
+                // on top of the base config. First-open lets "new users only" experiments tell who
+                // installed after they started. Without analytics (no user id) the plain base
+                // config comes back, exactly as before.
+                string uid = TwiceAnalyticsRunner.Instance != null ? TwiceAnalyticsRunner.Instance.UserId : "";
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    req.SetRequestHeader("X-User-Id", uid);
+                    req.SetRequestHeader("X-First-Open", TwiceExperimentState.FirstOpenUnix.ToString());
+                }
                 req.timeout = 20;
                 yield return req.SendWebRequest();
 
@@ -181,7 +218,8 @@ namespace TwiceSDK.RemoteConfig
 
         void ApplyResponse(string body)
         {
-            // body: {"ok":true,"version":N,"config":{...}}
+            // body: {"ok":true,"version":N,"config":{...},"experiment":{id,variant,rev,source}|null}
+            // The "experiment" key is only present when we identified ourselves (X-User-Id).
             var root = JObject.Parse(body);
 
             int version = _version;
@@ -196,9 +234,54 @@ namespace TwiceSDK.RemoteConfig
             PlayerPrefs.SetInt(VersionKey, version);
             PlayerPrefs.Save();
 
+            var xTok = root["experiment"];
+            if (xTok != null)
+            {
+                ExperimentAssignment next = null;
+                if (xTok.Type == JTokenType.Object)
+                {
+                    try { next = xTok.ToObject<ExperimentAssignment>(); } catch { next = null; }
+                    if (next != null && (string.IsNullOrEmpty(next.id) || string.IsNullOrEmpty(next.variant))) next = null;
+                }
+                ApplyExperiment(next);
+            }
+
             Log("updated to v" + version + " (" + _config.Count + " keys).");
             try { Updated?.Invoke(); }
             catch (Exception e) { Debug.LogWarning("[TwiceRemoteConfig] OnUpdated handler threw: " + e); }
+        }
+
+        /// <summary>
+        /// Persist the assignment, stamp the analytics user properties and, when the bucket actually
+        /// changed, log <c>experiment_assigned</c> so the panel can join the player to the variant.
+        /// </summary>
+        void ApplyExperiment(ExperimentAssignment next)
+        {
+            var prev = _experiment;
+            bool changed = (prev == null) != (next == null) || (next != null && !next.SameAs(prev));
+            _experiment = next;
+            TwiceExperimentState.Save(next);
+            TwiceExperimentState.ApplyUserProps(next);
+            if (!changed) return;
+
+            if (next != null)
+            {
+                var p = new Dictionary<string, object>
+                {
+                    { "experiment_id", next.id },
+                    { "variant", next.variant },
+                    { "prev_variant", (prev != null && prev.id == next.id) ? prev.variant : "" },
+                    { "source", next.source ?? "" },
+                };
+                TwiceAnalytics.LogEvent("experiment_assigned", p);
+                Log("experiment " + next.id + " → variant " + next.variant + " (" + next.source + ")");
+            }
+            else
+            {
+                Log("experiment ended / not enrolled — base config.");
+            }
+            try { ExperimentChanged?.Invoke(next); }
+            catch (Exception e) { Debug.LogWarning("[TwiceRemoteConfig] OnExperimentChanged handler threw: " + e); }
         }
 
         // ---- typed getters --------------------------------------------------

@@ -88,6 +88,23 @@ TwiceRemoteConfig.Fetch(ok => Debug.Log("config v" + TwiceRemoteConfig.Version))
 Manage keys in Twice admin → **Projeler** → your project → **Remote Config**. Types: `string`,
 `int`, `float`, `bool`, `json`.
 
+### A/B experiments
+Experiments are defined in the panel (Remote Config → **Deneyler**) as variant layers over the base
+config: only the keys listed in the experiment differ per variant. The SDK identifies the player on
+every config fetch (`X-User-Id`, `X-First-Open`), receives the variant's values merged into `config`,
+and keeps the assignment with the cache. Nothing changes in how you read keys — `GetInt(...)` simply
+returns the variant's value. The player's bucket is stamped on every analytics event as the
+`ab_group` (`"experiment:variant"`), `experiment_id` and `variant_id` user properties, and an
+`experiment_assigned` event is logged whenever the assignment changes, so the dashboard can split
+retention, playtime and revenue by variant.
+
+```csharp
+string exp = TwiceRemoteConfig.ExperimentId;   // "" when not enrolled
+string var = TwiceRemoteConfig.Variant;        // "A", "B", …
+TwiceRemoteConfig.OnExperimentChanged += a => Debug.Log(a == null ? "left experiment" : a.Group);
+```
+Do not set `ab_group` yourself any more — the SDK owns it.
+
 ## Namespaces
 - `TwiceSDK` — shared settings (`TwiceSettings`, `EnvironmentMode`).
 - `TwiceSDK.Analytics` — `TwiceAnalytics`.
@@ -105,7 +122,9 @@ server status while in Play Mode. Editor-only; never ships with a build.
 
 ## Backend
 - `POST {endpointBaseUrl}/sdk/events` — headers `X-App-Key` + `Content-Type: application/json`.
-- `GET  {endpointBaseUrl}/sdk/config`  — header `X-App-Key`; returns `{ ok, version, config }`.
+- `GET  {endpointBaseUrl}/sdk/config`  — headers `X-App-Key` (+ `X-User-Id`, `X-First-Open` when analytics
+  is on); returns `{ ok, version, config }`, plus `experiment` (`{ id, variant, rev, source }` or `null`)
+  for identified players.
 
 ## Versioning
 Public `TwiceAnalytics.*` / `TwiceRemoteConfig.*` methods are the API contract. Changes follow

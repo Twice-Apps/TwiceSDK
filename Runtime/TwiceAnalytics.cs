@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
 using TwiceSDK;
+using TwiceSDK.RemoteConfig;
 using TwiceSDK.VersionCheck;
 
 namespace TwiceSDK.Analytics
@@ -52,6 +53,10 @@ namespace TwiceSDK.Analytics
         /// <summary>Attach a property that is merged into every subsequent event's params.</summary>
         public static void SetUserProperty(string key, object value) =>
             Guard(() => TwiceAnalyticsRunner.Instance?.SetUserProperty(key, value));
+
+        /// <summary>Stop merging a previously set user property into events.</summary>
+        public static void RemoveUserProperty(string key) =>
+            Guard(() => TwiceAnalyticsRunner.Instance?.RemoveUserProperty(key));
 
         /// <summary>Log an arbitrary event with optional flat params (number/string/bool). Type defaults to "general".</summary>
         public static void LogEvent(string name, IDictionary<string, object> parameters = null) =>
@@ -324,11 +329,17 @@ namespace TwiceSDK.Analytics
             go.hideFlags = HideFlags.HideInHierarchy;
             Instance = go.AddComponent<TwiceAnalyticsRunner>();
             Instance.InitIdentity();
+            // A/B: restore the cached experiment assignment before the first event is queued, so
+            // app_open / session_start already carry ab_group on launches after the enrolment.
+            TwiceExperimentState.ApplyUserProps(TwiceExperimentState.Load());
         }
 
         void InitIdentity()
         {
             _userId = ResolveUserId();
+            // Stamp the first launch once (sent with config fetches as X-First-Open).
+            long firstOpen = TwiceExperimentState.FirstOpenUnix;
+            if (firstOpen <= 0) Log("first-open stamp unavailable");
             _displayName = PlayerPrefs.GetString(DisplayNameKey, "");
             _consent = PlayerPrefs.GetInt(ConsentKey, 1) == 1;
             _platform = ResolvePlatform();
@@ -489,6 +500,12 @@ namespace TwiceSDK.Analytics
         {
             if (string.IsNullOrEmpty(key)) return;
             _userProps[key] = value;
+        }
+
+        internal void RemoveUserProperty(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            _userProps.Remove(key);
         }
 
         internal void SetSandbox(bool sandbox)
