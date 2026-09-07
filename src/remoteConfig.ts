@@ -1,6 +1,6 @@
 import { Storage } from './storage';
 
-const DEFAULT_ENDPOINT = 'https://www.twiceapps.co/api/v1';
+const DEFAULT_ENDPOINT = 'https://api.twiceapps.co/v1';
 const CACHE_KEY = 'twice_remote_config';
 
 /** Options for {@link TwiceRemoteConfig.init}. */

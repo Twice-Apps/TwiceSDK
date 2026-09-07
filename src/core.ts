@@ -8,7 +8,7 @@
  */
 export const Core = {
   apiKey: '',
-  endpoint: 'https://www.twiceapps.co/api/v1',
+  endpoint: 'https://api.twiceapps.co/v1',
   userId: '',
   displayName: '',
   platform: '',

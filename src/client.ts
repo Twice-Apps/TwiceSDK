@@ -9,7 +9,7 @@ declare const require: (name: string) => any;
 declare const __DEV__: boolean;
 
 const KNOWN_TYPES = ['debug', 'warning', 'error', 'purchase', 'ad', 'general'];
-const DEFAULT_ENDPOINT = 'https://www.twiceapps.co/api/v1';
+const DEFAULT_ENDPOINT = 'https://api.twiceapps.co/v1';
 const USER_ID_KEY = 'twice_user_id';
 const DISPLAY_NAME_KEY = 'twice_display_name';
 const CONSENT_KEY = 'twice_consent';

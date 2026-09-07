@@ -15,7 +15,7 @@ export type EventParams = Record<string, ParamValue>;
 export interface TwiceOptions {
   /** Project API key (`X-App-Key`) from Twice admin → Projeler → your project. */
   apiKey: string;
-  /** Backend base URL. Default: `https://www.twiceapps.co/api/v1`. */
+  /** Backend base URL. Default: `https://api.twiceapps.co/v1`. */
   endpointBaseUrl?: string;
   /** Marketing app version (e.g. "1.2.0"). Auto-detected from expo-constants when available. */
   appVersion?: string;

@@ -204,7 +204,7 @@ Start opted-out with `Twice.init({ apiKey, consent: false })` and flip it once t
 | Option | Default | Description |
 |---|---|---|
 | `apiKey` (required) | — | Project key (`X-App-Key`). |
-| `endpointBaseUrl` | `https://www.twiceapps.co/api/v1` | Backend base URL. |
+| `endpointBaseUrl` | `https://api.twiceapps.co/v1` | Backend base URL. |
 | `appVersion` | auto (expo-constants) | Marketing version. |
 | `build` | — | iOS CFBundleVersion / Android versionCode. |
 | `platform` | `Platform.OS` mapped | `iOS` / `Android` / `Web` / … |
