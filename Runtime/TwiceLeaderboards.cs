@@ -224,7 +224,7 @@ namespace TwiceSDK.Leaderboards
 
         static void ResolveConfig(out string apiKey, out string baseUrl)
         {
-            apiKey = null; baseUrl = "https://www.twiceapps.co/api/v1";
+            apiKey = null; baseUrl = "https://api.twiceapps.co/v1";
             var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
             if (s != null)
             {

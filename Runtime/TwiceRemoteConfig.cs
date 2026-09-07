@@ -104,7 +104,7 @@ namespace TwiceSDK.RemoteConfig
         const string VersionKey = "twice_rc_version"; // cached version
 
         string _apiKey;
-        string _endpointBaseUrl = "https://www.twiceapps.co/api/v1";
+        string _endpointBaseUrl = "https://api.twiceapps.co/v1";
         bool _debug;
         bool _fetching;
         int _version;

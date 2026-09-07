@@ -273,7 +273,7 @@ namespace TwiceSDK.Analytics
 
         // config
         string _apiKey;
-        string _endpointBaseUrl = "https://www.twiceapps.co/api/v1";
+        string _endpointBaseUrl = "https://api.twiceapps.co/v1";
         bool _autoTrackSessions = true;
         int _flushIntervalSeconds = 15;
         int _maxBatchSize = 20;

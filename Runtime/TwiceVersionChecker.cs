@@ -53,7 +53,7 @@ namespace TwiceSDK.VersionCheck
         /// <summary>Check using the API key + endpoint from the TwiceSettings asset.</summary>
         public static void Check(Action<UpdateStatus> onResult)
         {
-            string apiKey = null, baseUrl = "https://www.twiceapps.co/api/v1";
+            string apiKey = null, baseUrl = "https://api.twiceapps.co/v1";
             var s = Resources.Load<TwiceSettings>(TwiceSettings.ResourceName);
             if (s != null)
             {
@@ -89,7 +89,7 @@ namespace TwiceSDK.VersionCheck
                 TwiceVersionCheckerRunner.EnsureExists();
                 TwiceVersionCheckerRunner.Instance.Run(
                     apiKey.Trim(),
-                    string.IsNullOrEmpty(baseUrl) ? "https://www.twiceapps.co/api/v1" : baseUrl.Trim().TrimEnd('/'),
+                    string.IsNullOrEmpty(baseUrl) ? "https://api.twiceapps.co/v1" : baseUrl.Trim().TrimEnd('/'),
                     platform, Application.version, build, onResult);
             }
             catch (Exception e)

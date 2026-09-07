@@ -59,7 +59,7 @@ namespace TwiceSDK
         public string apiKey = "";
 
         [Tooltip("Base URL of the Twice API. Default points at production.")]
-        public string endpointBaseUrl = "https://www.twiceapps.co/api/v1";
+        public string endpointBaseUrl = "https://api.twiceapps.co/v1";
 
         [Header("Initialization")]
         [Tooltip("Auto (default): SDK auto-initializes at boot from this asset (current behavior). " +
