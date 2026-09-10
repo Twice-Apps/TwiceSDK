@@ -1,6 +1,6 @@
 {
   "name": "@twiceapps/react-native",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Twice SDK for React Native & Expo — analytics (events, sessions, revenue, typed Debug/Warning/Error events) + remote config for the Twice backend. Dependency-light and privacy-safe (GDPR/KVKK).",
   "main": "src/index.ts",
   "react-native": "src/index.ts",

@@ -14,6 +14,7 @@ const USER_ID_KEY = 'twice_user_id';
 const DISPLAY_NAME_KEY = 'twice_display_name';
 const CONSENT_KEY = 'twice_consent';
 const QUEUE_KEY = 'twice_queue';
+const SESSION_KEY = 'twice_session';
 const MAX_QUEUE = 1000;
 const MAX_BACKOFF = 60;
 const NEW_SESSION_AFTER_MIN = 30;
@@ -43,8 +44,11 @@ export class TwiceClient {
   private userId = '';
   private displayName = '';
   private sessionId = '';
-  private sessionStart = 0;
   private bgSince: number | null = null;
+  /** Bu oturumda ön planda geçen toplam süre (ms) — arka planda beklenen süre HARİÇ. */
+  private foregroundMs = 0;
+  /** Şu anki ön plan diliminin başlangıcı; arka plandayken null. */
+  private fgSince: number | null = null;
   private userProps: EventParams = {};
 
   private queue: QueuedEvent[] = [];
@@ -84,6 +88,7 @@ export class TwiceClient {
     this.configured = true;
 
     await this.loadState(options);
+    await this.closeOrphanSession();
     this.startSession(this.autoSessions);
     AppState.addEventListener('change', this.onAppState);
     this.scheduleFlush();
@@ -144,6 +149,22 @@ export class TwiceClient {
     if (this.queue.length >= this.maxBatch) this.requestFlush();
   }
 
+  /**
+   * Belirli bir oturuma ve belirli bir ana olay yazar.
+   *
+   * `enqueue` her zaman GEÇERLİ oturumu ve ŞU ANI kullanıyor; önceki çalıştırmadan
+   * kalan oturumu kapatmak için ikisi de yanlış olurdu.
+   */
+  private enqueueAt(sessionId: string, ts: number, name: string, params?: EventParams | null): void {
+    if (!this.consent) return;
+    let merged: EventParams = params ? { ...params } : {};
+    if (Object.keys(this.userProps).length) merged = { ...this.userProps, ...merged };
+    this.queue.push({ eventId: uuid(), sessionId, ts, name: sanitizeName(name), type: '', params: merged });
+    if (this.queue.length > MAX_QUEUE) this.queue.splice(0, this.queue.length - MAX_QUEUE);
+    void this.persistQueue();
+    if (this.queue.length >= this.maxBatch) this.requestFlush();
+  }
+
   requestFlush(): void {
     if (!this.consent || this.sending || !this.identityReady) return;
     void this.drain();
@@ -168,33 +189,105 @@ export class TwiceClient {
 
   private startSession(logStart: boolean): void {
     this.sessionId = uuid();
-    this.sessionStart = Date.now();
+    this.foregroundMs = 0;
+    this.fgSince = Date.now();
+    void this.persistSession();
     if (logStart) {
       this.enqueue('session_start', { os: deviceOS(), platform: this.platform });
     }
   }
 
-  private endSession(): void {
+  /**
+   * Oturum süresi ÖN PLANDA geçen süredir.
+   *
+   * Eskiden `session_end.duration` oturum başlangıcı ile öne dönüş anı arasındaki fark
+   * olarak hesaplanıyordu: telefonu cebine koyup 40 dakika sonra açan biri 40 dakika
+   * "kullanmış" sayılıyordu. Panelin oyun süresi metriği bu sayıya bakıyor.
+   */
+  private endSession(atMs: number): void {
     if (!this.autoSessions) return;
-    const duration = Math.round((Date.now() - this.sessionStart) / 1000);
-    this.enqueue('session_end', { duration });
+    this.accumulateForeground(atMs);
+    this.enqueueAt(this.sessionId, Math.round(atMs / 1000), 'session_end', {
+      duration: Math.round(this.foregroundMs / 1000),
+    });
+    void Storage.remove(SESSION_KEY);
+  }
+
+  private accumulateForeground(atMs: number): void {
+    if (this.fgSince === null) return;
+    const delta = atMs - this.fgSince;
+    if (delta > 0) this.foregroundMs += delta;
+    this.fgSince = null;
   }
 
   private onAppState = (state: AppStateStatus): void => {
     if (state === 'background' || state === 'inactive') {
-      this.bgSince = Date.now();
+      const now = Date.now();
+      this.bgSince = now;
+      // Ön plan süresi burada durdurulup KAYDEDİLİR. Kullanıcı geri dönmezse oturumu
+      // kapatan tek şey bu kayıt: bir sonraki açılışta session_end ondan üretilir.
+      this.accumulateForeground(now);
+      void this.persistSession();
       void this.persistQueue();
       this.requestFlush();
-    } else if (state === 'active' && this.bgSince != null) {
-      const mins = (Date.now() - this.bgSince) / 60000;
+    } else if (state === 'active') {
+      const now = Date.now();
+      const mins = this.bgSince == null ? 0 : (now - this.bgSince) / 60000;
       this.bgSince = null;
       if (mins >= NEW_SESSION_AFTER_MIN) {
-        this.endSession();
+        this.endSession(now);
         this.startSession(this.autoSessions);
         this.log(`resumed after ${Math.round(mins)} min — started a new session`);
+        return;
       }
+      // Kısa kesinti aynı oturumdur: uygulamalar arası geçiş oturumu bölmemeli.
+      if (this.fgSince === null) this.fgSince = now;
+      void this.persistSession();
     }
   };
+
+  /** Açık oturumun diskteki izi — süreç öldürülse bile süresi kaybolmasın. */
+  private async persistSession(): Promise<void> {
+    if (!this.autoSessions) return;
+    try {
+      const now = Date.now();
+      // Canlı dilim de yazılır: uygulama ön plandayken çökerse ya da sistem tarafından
+      // kapatılırsa o ana kadarki süre kaybolmasın. Kayıt gönderim turuyla birlikte
+      // (varsayılan 15 sn) tazelendiği için en fazla o kadarlık bir kuyruk kaybolur.
+      const live = this.fgSince === null ? 0 : Math.max(0, now - this.fgSince);
+      await Storage.set(SESSION_KEY, JSON.stringify({
+        sid: this.sessionId,
+        foregroundMs: this.foregroundMs + live,
+        closedAt: now,
+      }));
+    } catch {
+      /* depolama yoksa oturum yalnız bellekte yaşar */
+    }
+  }
+
+  /**
+   * Önceki çalıştırmadan kalan açık oturumu kapatır.
+   *
+   * Kullanıcıların çoğu uygulamayı arka plana atıp bir daha aynı oturuma dönmüyor;
+   * eski kod session_end'i YALNIZ 30 dakikadan uzun aradan sonra öne dönüşte
+   * üretiyordu, yani oturumların büyük kısmı hiç kapanmıyordu (ölçüldü: 17 oturumda 1).
+   */
+  private async closeOrphanSession(): Promise<void> {
+    if (!this.autoSessions) return;
+    try {
+      const raw = await Storage.get(SESSION_KEY);
+      await Storage.remove(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s.sid !== 'string' || s.sid === '') return;
+      const ms = typeof s.foregroundMs === 'number' && s.foregroundMs > 0 ? s.foregroundMs : 0;
+      const at = typeof s.closedAt === 'number' ? s.closedAt : Date.now();
+      this.enqueueAt(s.sid, Math.round(at / 1000), 'session_end', { duration: Math.round(ms / 1000) });
+      this.log('closed the previous session left open by an app kill');
+    } catch {
+      /* bozuk kayıt: sessizce geç, yeni oturum yine de başlar */
+    }
+  }
 
   // ---- environment --------------------------------------------------------
 
@@ -211,6 +304,8 @@ export class TwiceClient {
   }
 
   private async tick(): Promise<void> {
+    // Açık oturumun süresi her turda diske tazelenir (bkz. persistSession).
+    void this.persistSession();
     if (this.consent && this.queue.length > 0 && !this.sending) {
       await this.drain();
     } else if (this.queue.length === 0) {
