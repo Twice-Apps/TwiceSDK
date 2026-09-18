@@ -594,7 +594,13 @@ namespace TwiceSDK.Analytics
         {
             while (true)
             {
-                yield return new WaitForSeconds(_currentDelay);
+                // REALTIME olmak ZORUNDA. WaitForSeconds olcekli zamana tabidir: oyun
+                // Time.timeScale = 0 yaptigi anda (baglanti paneli, pause, herhangi bir sistem)
+                // flush dongusu tamamen durur ve o oturumda BIR DAHA HIC event gonderilmez.
+                // Sunucuda yalnizca donmadan onceki birkac event gorunur; panelde bu "oyuncu o anda
+                // yok oldu" gibi okunur ve teshisi tamamen yaniltir. Olculdu: Picrush'ta level 1
+                // oyuncularinin yarisi tam olarak bu yuzden "kayip" gorunuyordu.
+                yield return new WaitForSecondsRealtime(_currentDelay);
                 if (!_consent) { _currentDelay = _flushIntervalSeconds; continue; }
                 bool hasWork;
                 lock (_queueLock) hasWork = _queue.Count > 0;
