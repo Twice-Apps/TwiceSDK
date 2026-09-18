@@ -300,6 +300,9 @@ namespace TwiceSDK.Analytics
         // state
         readonly List<QueuedEvent> _queue = new List<QueuedEvent>();
         readonly object _queueLock = new object();
+        // Dosya yazimi kuyruk kilidinin ICINDE yapilmaz; ama Enqueue arka thread'den de
+        // cagrilabildigi icin yazimlarin kendi arasinda seri olmasi gerekiyor.
+        readonly object _fileLock = new object();
         readonly Dictionary<string, object> _userProps = new Dictionary<string, object>();
         bool _consent = true;
         bool _configured;
@@ -563,6 +566,7 @@ namespace TwiceSDK.Analytics
 
             int count;
             bool triggerFlush;
+            bool trimmed = false;
             lock (_queueLock)
             {
                 _queue.Add(ev);
@@ -571,11 +575,12 @@ namespace TwiceSDK.Analytics
                     int drop = _queue.Count - MaxQueue;
                     _queue.RemoveRange(0, drop);
                     Debug.LogWarning($"[TwiceAnalytics] Queue capped at {MaxQueue}; dropped {drop} oldest event(s).");
+                    trimmed = true;
                 }
                 count = _queue.Count;
                 triggerFlush = count >= _maxBatchSize;
             }
-            PersistQueue();
+            PersistAppend(ev, trimmed);
             Log($"Queued '{clean}' ({count} pending).");
 
             if (triggerFlush) RequestFlush();
@@ -756,6 +761,22 @@ namespace TwiceSDK.Analytics
         //   eventId \t sessionId \t ts \t name \t type \t base64(paramsJson)
         // (type may be empty). Older 5-col / 4-col lines load with type "".
 
+        static void AppendQueueLine(StringBuilder sb, QueuedEvent e)
+        {
+            sb.Append(e.eventId).Append('\t')
+              .Append(e.sessionId).Append('\t')
+              .Append(e.ts.ToString(CultureInfo.InvariantCulture)).Append('\t')
+              .Append(e.name).Append('\t')
+              .Append(e.type ?? "").Append('\t')
+              .Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(e.paramsJson ?? "{}")))
+              .Append('\n');
+        }
+
+        /// <summary>
+        /// Kuyrugun TAMAMINI diske yazar. Yalniz kuyruktan satir CIKTIGINDA gerekir
+        /// (flush sonrasi, consent iptali, kapak asimi, kapanis). Event EKLEME yolu bunu
+        /// kullanmaz -- bkz. <see cref="PersistAppend"/>.
+        /// </summary>
         void PersistQueue()
         {
             try
@@ -764,29 +785,51 @@ namespace TwiceSDK.Analytics
                 lock (_queueLock) snapshot = _queue.ToArray();
 
                 var sb = new StringBuilder(snapshot.Length * 64);
-                foreach (var e in snapshot)
-                {
-                    sb.Append(e.eventId).Append('\t')
-                      .Append(e.sessionId).Append('\t')
-                      .Append(e.ts.ToString(CultureInfo.InvariantCulture)).Append('\t')
-                      .Append(e.name).Append('\t')
-                      .Append(e.type ?? "").Append('\t')
-                      .Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(e.paramsJson ?? "{}")))
-                      .Append('\n');
-                }
+                foreach (var e in snapshot) AppendQueueLine(sb, e);
 
 #if UNITY_WEBGL && !UNITY_EDITOR
                 PlayerPrefs.SetString(QueuePrefsKey, sb.ToString());
                 PlayerPrefs.Save();
 #else
-                if (snapshot.Length == 0)
+                lock (_fileLock)
                 {
-                    if (File.Exists(_queueFilePath)) File.Delete(_queueFilePath);
+                    if (snapshot.Length == 0)
+                    {
+                        if (File.Exists(_queueFilePath)) File.Delete(_queueFilePath);
+                    }
+                    else File.WriteAllText(_queueFilePath, sb.ToString(), Encoding.UTF8);
                 }
-                else File.WriteAllText(_queueFilePath, sb.ToString(), Encoding.UTF8);
 #endif
             }
             catch (Exception e) { Log("PersistQueue failed: " + e.Message); }
+        }
+
+        /// <summary>
+        /// Event ekleme yolunun diske yazimi: TEK SATIR ekler.
+        ///
+        /// Eskiden burada da PersistQueue() cagriliyordu, yani her LogEvent'te kuyrugun tamami
+        /// yeniden Base64'lenip dosyaya basiliyordu. Maliyet event basina O(kuyruk uzunlugu);
+        /// kuyruk MaxQueue'ya (1000) kadar buyuyebildigi ve ag kotuyken (backoff) buyudugu icin
+        /// bu, ana thread uzerinde O(N^2) senkron disk I/O demekti -- ANR uretecek cinsten.
+        /// Format zaten satir bazli oldugu icin ekleme bire bir ayni dosyayi uretir.
+        /// </summary>
+        void PersistAppend(QueuedEvent ev, bool queueTrimmed)
+        {
+            // Kapak asilip satir DUSTUYSE dosya artik kuyrugu temsil etmiyor; o nadir durumda
+            // tam yazim sart.
+            if (queueTrimmed) { PersistQueue(); return; }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+            PersistQueue(); // PlayerPrefs'e ekleme diye bir sey yok
+#else
+            try
+            {
+                var sb = new StringBuilder(96);
+                AppendQueueLine(sb, ev);
+                lock (_fileLock) File.AppendAllText(_queueFilePath, sb.ToString(), Encoding.UTF8);
+            }
+            catch (Exception e) { Log("PersistAppend failed: " + e.Message); }
+#endif
         }
 
         void LoadPersistedQueue()
@@ -797,7 +840,8 @@ namespace TwiceSDK.Analytics
 #if UNITY_WEBGL && !UNITY_EDITOR
                 raw = PlayerPrefs.GetString(QueuePrefsKey, "");
 #else
-                raw = File.Exists(_queueFilePath) ? File.ReadAllText(_queueFilePath, Encoding.UTF8) : "";
+                lock (_fileLock)
+                    raw = File.Exists(_queueFilePath) ? File.ReadAllText(_queueFilePath, Encoding.UTF8) : "";
 #endif
                 if (string.IsNullOrEmpty(raw)) return;
 
