@@ -45,26 +45,26 @@ namespace TwiceSDK.Analytics
         }
 
         /// <summary>Enable/disable collection (GDPR/KVKK). When false, queued events are cleared and nothing is sent.</summary>
-        public static void SetConsent(bool granted) => Guard(() => TwiceAnalyticsRunner.Instance?.SetConsent(granted));
+        public static void SetConsent(bool granted) => Run(r => r.SetConsent(granted));
 
         /// <summary>Force sandbox (true) or production (false) tagging at runtime (overrides settings/Auto).</summary>
-        public static void SetSandbox(bool sandbox) => Guard(() => TwiceAnalyticsRunner.Instance?.SetSandbox(sandbox));
+        public static void SetSandbox(bool sandbox) => Run(r => r.SetSandbox(sandbox));
 
         /// <summary>Attach a property that is merged into every subsequent event's params.</summary>
         public static void SetUserProperty(string key, object value) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.SetUserProperty(key, value));
+            Run(r => r.SetUserProperty(key, value));
 
         /// <summary>Stop merging a previously set user property into events.</summary>
         public static void RemoveUserProperty(string key) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.RemoveUserProperty(key));
+            Run(r => r.RemoveUserProperty(key));
 
         /// <summary>Log an arbitrary event with optional flat params (number/string/bool). Type defaults to "general".</summary>
         public static void LogEvent(string name, IDictionary<string, object> parameters = null) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters));
+            Enqueue(name, parameters, null);
 
         /// <summary>Log an event with an explicit type/category ("debug" | "warning" | "error" | "purchase" | "ad" | "general").</summary>
         public static void LogEvent(string name, string type, IDictionary<string, object> parameters) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, type));
+            Enqueue(name, parameters, type);
 
         // ---- Typed log events (Debug / Warning / Error) ---------------------
         // These tag the event with a "type" the backend dashboard filters/splits by.
@@ -72,15 +72,15 @@ namespace TwiceSDK.Analytics
 
         /// <summary>Log a developer/diagnostic event (type "debug").</summary>
         public static void DebugEvent(string name, IDictionary<string, object> parameters = null) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "debug"));
+            Enqueue(name, parameters, "debug");
 
         /// <summary>Log a warning event (type "warning").</summary>
         public static void WarningEvent(string name, IDictionary<string, object> parameters = null) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "warning"));
+            Enqueue(name, parameters, "warning");
 
         /// <summary>Log an error event (type "error").</summary>
         public static void ErrorEvent(string name, IDictionary<string, object> parameters = null) =>
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, parameters, "error"));
+            Enqueue(name, parameters, "error");
 
         /// <summary>Log an error from a caught exception — message, type and stack trace ride in params (type "error").</summary>
         public static void ErrorEvent(string name, Exception exception, IDictionary<string, object> extra = null)
@@ -88,7 +88,7 @@ namespace TwiceSDK.Analytics
             var p = exception == null
                 ? extra
                 : With(extra, ("message", exception.Message), ("exception", exception.GetType().Name), ("stack", exception.StackTrace));
-            Guard(() => TwiceAnalyticsRunner.Instance?.Enqueue(name, p, "error"));
+            Enqueue(name, p, "error");
         }
 
         // ---- Preset helpers -------------------------------------------------
@@ -232,6 +232,56 @@ namespace TwiceSDK.Analytics
             return d;
         }
 
+        // ---- pre-init buffer -------------------------------------------------
+        // RequireBootstrap modunda runner ancak Twice.Initialize() icinde, surum kontrolunden
+        // SONRA kuruluyor. Ondan once yapilan cagrilar eskiden `Instance?.` yuzunden sessizce
+        // kayboluyordu: oyunun Awake'te gonderdigi app_open (is_first_open) hic ulasmiyor, panel
+        // kurulum sayisini 0 gosteriyordu (Idle Cash Run, 2026-09). Artik cagrilar sirasiyla
+        // tutuluyor ve runner yapilandirilinca oynatiliyor; event zamani cagrinin ANIDIR.
+        const int MaxPreInit = 256;
+        static readonly List<Action<TwiceAnalyticsRunner>> _preInit = new List<Action<TwiceAnalyticsRunner>>();
+        static readonly object _preInitLock = new object();
+        static int _preInitDropped;
+
+        static void Enqueue(string name, IDictionary<string, object> parameters, string type)
+        {
+            long ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            Run(r => r.Enqueue(name, parameters, type, ts));
+        }
+
+        static void Run(Action<TwiceAnalyticsRunner> op)
+        {
+            Guard(() =>
+            {
+                var inst = TwiceAnalyticsRunner.Instance;
+                if (inst != null && inst.IsConfigured) { op(inst); return; }
+                lock (_preInitLock)
+                {
+                    if (_preInit.Count < MaxPreInit) _preInit.Add(op);
+                    else _preInitDropped++;
+                }
+            });
+        }
+
+        /// <summary>Runner yapilandirilinca (bir kez) cagrilir: bekleyen cagrilari sirasiyla oynatir.</summary>
+        internal static void DrainPreInit(TwiceAnalyticsRunner inst)
+        {
+            List<Action<TwiceAnalyticsRunner>> ops;
+            int dropped;
+            lock (_preInitLock)
+            {
+                if (_preInit.Count == 0 && _preInitDropped == 0) return;
+                ops = new List<Action<TwiceAnalyticsRunner>>(_preInit);
+                _preInit.Clear();
+                dropped = _preInitDropped;
+                _preInitDropped = 0;
+            }
+            foreach (var op in ops)
+                Guard(() => op(inst));
+            if (dropped > 0)
+                Debug.LogWarning("[TwiceAnalytics] " + dropped + " call(s) made before init were dropped (buffer limit " + MaxPreInit + ").");
+        }
+
         static void Guard(Action action)
         {
             try { action(); }
@@ -247,6 +297,7 @@ namespace TwiceSDK.Analytics
         // Exposed to TwiceSDK.Players.TwicePlayers (same assembly) — identity & profile accessors.
         internal string UserId => _userId;
         internal string DisplayName => _displayName;
+        internal bool IsConfigured => _configured;
 
         const string UserIdKey = "twice_analytics_user_id";
         const string DisplayNameKey = "twice_display_name";
@@ -256,6 +307,11 @@ namespace TwiceSDK.Analytics
         const int MaxQueue = 1000;
         const float MaxBackoffSeconds = 60f;
         const double NewSessionAfterMinutes = 30.0;
+        // Oturum suresi kaybolmasin diye (GameAnalytics'teki gibi): acik oturumun durumu diske
+        // yazilir; uygulama arka planda oldurulup session_end gidemezse sonraki acilista kayitli
+        // sureyle gonderilir. Oyuncu hic donmezse panel son heartbeat'in suresini kullanir.
+        const string OpenSessionKey = "twice_analytics_open_session";
+        const float HeartbeatSeconds = 120f;
 
         struct QueuedEvent
         {
@@ -433,14 +489,18 @@ namespace TwiceSDK.Analytics
             {
                 _configured = true;
                 Begin();
+                // Init'ten once yapilan cagrilar (Awake'teki app_open vb.) simdi siraya girer.
+                TwiceAnalytics.DrainPreInit(this);
             }
         }
 
         void Begin()
         {
             LoadPersistedQueue();
+            RecoverOpenSession();
             StartNewSession(logStart: _autoTrackSessions);
             StartCoroutine(FlushLoop());
+            StartCoroutine(HeartbeatLoop());
             // Boot flush is deferred to Twice.Initialize() step 2 so the ordered sequence
             // (version check → analytics → remote config) holds. Without the bootstrap object,
             // the periodic FlushLoop still sends shortly after.
@@ -455,6 +515,7 @@ namespace TwiceSDK.Analytics
             _activeSeconds = 0;
             _foregroundStartUtc = DateTime.UtcNow;
             _inForeground = true;
+            PersistOpenSession();
             if (logStart)
                 Enqueue("session_start", new Dictionary<string, object>
                 {
@@ -465,22 +526,88 @@ namespace TwiceSDK.Analytics
                 });
         }
 
-        void EndSession()
+        // Foreground-only: banked stretches + the current one (if still in the foreground).
+        double CurrentSessionSeconds()
+        {
+            double duration = _activeSeconds;
+            if (_inForeground)
+                duration += Math.Max(0, (DateTime.UtcNow - _foregroundStartUtc).TotalSeconds);
+            if (duration < 0) duration = 0;                 // device clock jumped backwards
+            else if (duration > 86400) duration = 86400;    // cap at 24h — longer is corrupt state
+            return Math.Round(duration, 2);
+        }
+
+        /// <param name="endTs">Oturumun bittigi an (unix sn). 0 = simdi. Arka plandan 30+ dk sonra
+        /// donulunce oturum arka plana gecildigi AN bitmistir; donus aninin tarihi yanlis gune yazardi.</param>
+        void EndSession(long endTs = 0)
         {
             if (!_autoTrackSessions) return;
             // A session that never started has nothing to report. Without this guard a default
             // _sessionStartUtc (year 1) yields a ~2000-year duration that poisons every
             // all-time playtime average on the dashboard.
             if (_sessionStartUtc == default(DateTime)) return;
-            // Foreground-only: banked stretches + the current one (if still in the foreground).
-            double duration = _activeSeconds;
-            if (_inForeground)
+            Enqueue("session_end", new Dictionary<string, object> { { "duration", CurrentSessionSeconds() } }, null, endTs);
+            ClearOpenSession();
+        }
+
+        // ---- session persistence / recovery ----------------------------------
+
+        // Format: sessionId|activeSeconds|lastActiveUnix. Her heartbeat'te ve arka plana
+        // geciste guncellenir; oturum normal kapaninca silinir.
+        void PersistOpenSession()
+        {
+            if (!_autoTrackSessions || string.IsNullOrEmpty(_sessionId)) return;
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            PlayerPrefs.SetString(OpenSessionKey, _sessionId + "|"
+                + CurrentSessionSeconds().ToString(CultureInfo.InvariantCulture) + "|"
+                + now.ToString(CultureInfo.InvariantCulture));
+            PlayerPrefs.Save();
+        }
+
+        void ClearOpenSession()
+        {
+            if (!PlayerPrefs.HasKey(OpenSessionKey)) return;
+            PlayerPrefs.DeleteKey(OpenSessionKey);
+            PlayerPrefs.Save();
+        }
+
+        // Onceki surec session_end gonderemeden bittiyse (arka planda oldurme, cokme, pil)
+        // o oturumu kayitli sureyle ve son aktif ANIN zamaniyla kapatir.
+        void RecoverOpenSession()
+        {
+            string raw = PlayerPrefs.GetString(OpenSessionKey, "");
+            if (string.IsNullOrEmpty(raw)) return;
+            ClearOpenSession();
+            if (!_autoTrackSessions) return;
+
+            var parts = raw.Split('|');
+            if (parts.Length < 3 || string.IsNullOrEmpty(parts[0])) return;
+            double secs;
+            long lastActive;
+            if (!double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out secs)) return;
+            if (!long.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out lastActive)) return;
+            if (secs < 0) secs = 0;
+            else if (secs > 86400) secs = 86400;
+
+            Enqueue("session_end", new Dictionary<string, object>
             {
-                duration += Math.Max(0, (DateTime.UtcNow - _foregroundStartUtc).TotalSeconds);
+                { "duration", Math.Round(secs, 2) },
+                { "recovered", true },
+            }, null, lastActive, parts[0]);
+            Log("Recovered unfinished session " + parts[0] + " (" + secs.ToString("0", CultureInfo.InvariantCulture) + "s).");
+        }
+
+        // Oyuncu hic geri donmezse session_end hic gelmez; panel o oturumun suresini son
+        // heartbeat'ten alir (hata en fazla HeartbeatSeconds). Yalniz on plandayken gonderilir.
+        IEnumerator HeartbeatLoop()
+        {
+            while (true)
+            {
+                yield return new WaitForSecondsRealtime(HeartbeatSeconds);
+                if (!_autoTrackSessions || !_inForeground || string.IsNullOrEmpty(_sessionId)) continue;
+                Enqueue("session_heartbeat", new Dictionary<string, object> { { "duration", CurrentSessionSeconds() } });
+                PersistOpenSession();
             }
-            if (duration < 0) duration = 0;                 // device clock jumped backwards
-            else if (duration > 86400) duration = 86400;    // cap at 24h — longer is corrupt state
-            Enqueue("session_end", new Dictionary<string, object> { { "duration", Math.Round(duration, 2) } });
         }
 
         // ---- public-facing engine ops --------------------------------------
@@ -538,7 +665,7 @@ namespace TwiceSDK.Analytics
             }
         }
 
-        internal void Enqueue(string name, IDictionary<string, object> parameters, string type = null)
+        internal void Enqueue(string name, IDictionary<string, object> parameters, string type = null, long tsOverride = 0, string sessionIdOverride = null)
         {
             if (!_consent) return;
 
@@ -557,8 +684,8 @@ namespace TwiceSDK.Analytics
             var ev = new QueuedEvent
             {
                 eventId = Guid.NewGuid().ToString("N"),
-                sessionId = _sessionId,
-                ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                sessionId = string.IsNullOrEmpty(sessionIdOverride) ? _sessionId : sessionIdOverride,
+                ts = tsOverride > 0 ? tsOverride : DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 name = clean,
                 type = cleanType,
                 paramsJson = json,
@@ -896,6 +1023,7 @@ namespace TwiceSDK.Analytics
                     _inForeground = false;
                 }
                 _backgroundSinceUtc = DateTime.UtcNow;
+                PersistOpenSession();
                 PersistQueue();
                 RequestFlush();
             }
@@ -907,11 +1035,12 @@ namespace TwiceSDK.Analytics
                 _inForeground = true;
                 if (_backgroundSinceUtc.HasValue)
                 {
-                    double mins = (DateTime.UtcNow - _backgroundSinceUtc.Value).TotalMinutes;
+                    DateTime backgroundSince = _backgroundSinceUtc.Value;
+                    double mins = (DateTime.UtcNow - backgroundSince).TotalMinutes;
                     _backgroundSinceUtc = null;
                     if (mins >= NewSessionAfterMinutes)
                     {
-                        EndSession();
+                        EndSession(new DateTimeOffset(backgroundSince).ToUnixTimeSeconds());
                         StartNewSession(logStart: _autoTrackSessions);
                         Log($"Resumed after {mins:0} min — started a new session.");
                     }
