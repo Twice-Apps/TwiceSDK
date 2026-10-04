@@ -171,6 +171,7 @@ player's grants, applies them through `apply` and reports back (as analytics eve
 import { TwiceWallet } from '@twiceapps/react-native';
 
 TwiceWallet.register('coin', {
+  name: 'Coins',                                // optional: shown in the panel (+ decimals)
   get: () => store.coins,                       // current balance
   apply: (delta) => {                           // + give / − take; persist it
     if (delta < 0 && store.coins < -delta) return false;   // refuse → shown as "rejected"
@@ -181,8 +182,8 @@ TwiceWallet.register('coin', {
 const off = TwiceWallet.onGrantApplied((g) => toast(`+${g.amount} ${g.currency}`));
 await TwiceWallet.sync();                       // optional (also automatic on start/foreground)
 ```
-The key must match the currency key in the panel. A grant for a currency the app did not
-register stays queued, so a later version can still apply it.
+The panel's currency list comes from these `register` calls; nothing to define in the panel. A
+grant for a currency the app did not register stays queued, so a later version can still apply it.
 
 ## Version check (forced / optional updates)
 

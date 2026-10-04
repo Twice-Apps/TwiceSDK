@@ -16,6 +16,10 @@ export interface WalletGrant {
 
 /** How the game exposes one currency to the wallet. */
 export interface WalletCurrency {
+  /** Name shown in the panel (e.g. "Gems"). Optional; derived from the key otherwise. */
+  name?: string;
+  /** Decimal places the currency uses (0-4). Default 0 = whole numbers. */
+  decimals?: number;
   /** Current balance. */
   get(): number;
   /**
@@ -157,7 +161,18 @@ async function applyOne(row: any, done: Record<string, { s: string; t: number }>
 async function doSync(): Promise<number> {
   if (currencies.size === 0 || !Core.userId) return 0;
   lastSync = Date.now();
-  const j = await apiGet(`/sdk/wallet/grants?user_id=${encodeURIComponent(Core.userId)}`);
+  // The registered currencies ride along: the panel's currency list is built from them.
+  const cur = [...currencies.entries()].map(([key, h]) => {
+    const o: { key: string; decimals: number; name?: string } = {
+      key,
+      decimals: Math.max(0, Math.min(4, Math.floor(h.decimals ?? 0))),
+    };
+    if (h.name) o.name = h.name;
+    return o;
+  });
+  const j = await apiGet(
+    `/sdk/wallet/grants?user_id=${encodeURIComponent(Core.userId)}&currencies=${encodeURIComponent(JSON.stringify(cur))}`,
+  );
   let applied = 0;
   if (j && Array.isArray(j.grants)) {
     const done = (await loadJson(DONE_KEY)) as Record<string, { s: string; t: number }>;
@@ -191,8 +206,11 @@ async function firstSync(): Promise<void> {
  * callback and acknowledges them as analytics events (offline-safe queue).
  *
  * ```ts
- * TwiceWallet.register('coin', { get: () => coins, apply: (delta) => { addCoins(delta); return true; } });
+ * TwiceWallet.register('coin', { name: 'Coins', get: () => coins, apply: (delta) => { addCoins(delta); return true; } });
  * ```
+ *
+ * The panel's currency list comes from these calls (key, name, decimals ride along on every sync);
+ * nothing has to be defined in the panel.
  *
  * Nothing happens until the first `register`. Pending grants are fetched shortly after that,
  * whenever the app returns to the foreground (at most once a minute) and on `sync()`.

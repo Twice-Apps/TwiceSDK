@@ -4,6 +4,12 @@ This is the changelog for the React Native / Expo package (`@twiceapps/react-nat
 branch `react-expo`). The Unity SDK has its own changelog on `main`. Adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-10-04
+### Changed
+- **Wallet currencies are defined by the app.** `TwiceWallet.register(key, { name?, decimals?, get,
+  apply })`; every sync reports the registered currencies (`currencies` query parameter on
+  `GET /sdk/wallet/grants`) and the panel builds its currency list from them. Same as Unity 1.8.1.
+
 ## [1.1.0] - 2026-10-04
 ### Added
 - **`TwiceWallet`**: lets the Twice panel give or take a player's in-game currency and shows the
