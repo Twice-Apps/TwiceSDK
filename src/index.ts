@@ -21,6 +21,8 @@ export type { LeaderboardEntry, LeaderboardRank } from './leaderboards';
 export { TwiceVersionCheck } from './versionCheck';
 export type { UpdateAction, UpdateStatus } from './versionCheck';
 export { TwicePush } from './push';
+export { TwiceWallet } from './wallet';
+export type { WalletGrant, WalletCurrency } from './wallet';
 export type { EventType, EventParams, ParamValue, TwiceOptions, DebugInfo } from './types';
 
 import { TwiceAnalytics } from './analytics';

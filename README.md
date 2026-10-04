@@ -161,6 +161,29 @@ const n   = await TwiceLeaderboards.getEntryCount('high_score');
 const prevTop = await TwiceLeaderboards.getTopBeforeReset('high_score', 50);
 ```
 
+## Wallet (panel gives / takes currency)
+
+The panel (Wallet module, or Players → player) queues grants — "+100 coin", "−50 gem" — for a
+player. The app owns the balance, so it registers each currency once; the SDK pulls the
+player's grants, applies them through `apply` and reports back (as analytics events).
+
+```ts
+import { TwiceWallet } from '@twiceapps/react-native';
+
+TwiceWallet.register('coin', {
+  get: () => store.coins,                       // current balance
+  apply: (delta) => {                           // + give / − take; persist it
+    if (delta < 0 && store.coins < -delta) return false;   // refuse → shown as "rejected"
+    store.addCoins(delta);
+    return true;
+  },
+});
+const off = TwiceWallet.onGrantApplied((g) => toast(`+${g.amount} ${g.currency}`));
+await TwiceWallet.sync();                       // optional (also automatic on start/foreground)
+```
+The key must match the currency key in the panel. A grant for a currency the app did not
+register stays queued, so a later version can still apply it.
+
 ## Version check (forced / optional updates)
 
 ```ts
@@ -245,6 +268,10 @@ patterns, and pitfalls written for AI coding agents.
 
 `GET {endpointBaseUrl}/sdk/config` (header `X-App-Key`) → `{ ok, version, config }`.
 Identical contract to the Unity SDK, so both feed the same dashboards.
+
+`GET {endpointBaseUrl}/sdk/wallet/grants?user_id=` (header `X-App-Key`) → `{ ok, grants: [{ id,
+currency, amount, note, created_at }] }`. Acks are the `wallet_grant_applied` /
+`wallet_grant_rejected` events, balances the `wallet_balance` event.
 
 ## License
 

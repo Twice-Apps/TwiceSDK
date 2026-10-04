@@ -84,8 +84,11 @@ if (s.isForced) { /* block UI */ } // open store: Linking.openURL(TwiceVersionCh
 
 // Push: app gets the token (expo-notifications), SDK registers it for the user:
 await TwicePush.register(deviceToken);
+
+// Wallet: the panel can give/take currency; the app applies it (register once, early):
+TwiceWallet.register('coin', { get: () => coins, apply: (delta) => { addCoins(delta); return true; } });
 ```
-Module parity with Unity: Analytics, Remote Config, Players, Leaderboards, Version Check, Push.
+Module parity with Unity: Analytics, Remote Config, Players, Leaderboards, Version Check, Push, Wallet.
 Monetization / Functions / operator Notifications / Settings are backend/dashboard features driven
 by events — there is no separate client API for them (same as Unity).
 
@@ -136,5 +139,8 @@ await TwiceLeaderboards.getTop(boardId, count) / getMyRank(boardId) / getEntryCo
 await TwiceLeaderboards.getTopBeforeReset(boardId, count) / getMyRankBeforeReset(boardId)
 await TwiceVersionCheck.check({platform?,version?,build?})  // → UpdateStatus; .storeUrl(status)
 await TwicePush.register(token, {platform?,env?}) / unregister(token)
+TwiceWallet.register(currency, { get, apply }) / unregister(currency)
+await TwiceWallet.sync()  // → applied count;  TwiceWallet.onGrantApplied(cb) → unsubscribe
+TwiceWallet.reportBalances()
 ```
 Options: `{ apiKey, endpointBaseUrl?, appVersion?, build?, platform?, sandbox?, flushIntervalSeconds?, maxBatchSize?, autoTrackSessions?, consent?, debug?, userId? }`.

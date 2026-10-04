@@ -4,6 +4,18 @@ This is the changelog for the React Native / Expo package (`@twiceapps/react-nat
 branch `react-expo`). The Unity SDK has its own changelog on `main`. Adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-04
+### Added
+- **`TwiceWallet`**: lets the Twice panel give or take a player's in-game currency and shows the
+  balances in the panel. The app keeps owning the balance:
+  `TwiceWallet.register('coin', { get: () => coins, apply: (delta) => { addCoins(delta); return true; } })`.
+  The SDK pulls the player's queued grants (`GET /sdk/wallet/grants`) shortly after the first
+  `register`, whenever the app returns to the foreground (at most once a minute) and on
+  `TwiceWallet.sync()`, applies them through `apply` and acknowledges them as analytics events
+  (`wallet_grant_applied` / `wallet_grant_rejected`, offline-safe queue). Applied grant ids are
+  remembered (`twice_wallet_done`), so a grant is never applied twice. `wallet_balance` is logged
+  when balances changed. `onGrantApplied(cb)` for UI. Same wire protocol as Unity 1.8.0.
+
 ## [1.0.1] - 2026-09-11
 ### Fixed
 - **Session duration was wrong and mostly missing.** `session_end` was emitted only when the
