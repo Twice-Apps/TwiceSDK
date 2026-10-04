@@ -3,6 +3,13 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.1] - 2026-10-04
+### Changed
+- **Wallet currencies are defined by the game.** `TwiceWallet.Register` takes an optional
+  `displayName` and `decimals`; every sync reports the registered currencies (`currencies` query
+  parameter on `GET /sdk/wallet/grants`), and the panel builds its currency list from them. Nothing
+  has to be defined in the panel any more.
+
 ## [1.8.0] - 2026-10-04
 ### Added
 - **Wallet** (`TwiceSDK.Wallet.TwiceWallet`): lets the Twice panel give or take a player's in-game

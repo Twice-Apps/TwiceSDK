@@ -119,12 +119,14 @@ TwiceWallet.Register("coin",
         if (delta < 0 && CurrencyManager.Instance.Coins < -delta) return false; // refuse → "rejected"
         CurrencyManager.Instance.AddMoney(delta);
         return true;
-    });
+    },
+    "Coins");                                             // optional: name shown in the panel (+ decimals)
 TwiceWallet.OnGrantApplied += g => Toast($"+{g.Amount} {g.Currency}");
 TwiceWallet.Sync();   // optional: e.g. when the shop opens (also automatic on start/resume)
 ```
-The key (`"coin"`) must match the currency key in the panel. Grants for a currency this build did
-not register stay queued (a later build can apply them). Acks and balances travel as analytics
+The panel's currency list comes from these `Register` calls (key, display name, decimals); there is
+nothing to define in the panel. Grants for a currency this build did not register stay queued (a later
+build can apply them). Acks and balances travel as analytics
 events (`wallet_grant_applied`, `wallet_grant_rejected`, `wallet_balance`).
 
 ## Namespaces

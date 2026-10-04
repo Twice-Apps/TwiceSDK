@@ -30,8 +30,11 @@ namespace TwiceSDK.Wallet
     /// back as analytics events (so the acknowledgement rides the offline-safe event queue).
     ///
     /// <code>
-    /// TwiceWallet.Register("coin", () => Coins.Balance, delta => { Coins.Add(delta); return true; });
+    /// TwiceWallet.Register("coin", () => Coins.Balance, delta => { Coins.Add(delta); return true; }, "Coins");
     /// </code>
+    ///
+    /// The currency list in the panel comes from these calls: every sync reports the registered
+    /// keys (with the display name and decimals), so nothing has to be defined in the panel.
     ///
     /// Nothing happens until the first Register call. Pending grants are fetched shortly after
     /// that, on every resume (at most once a minute) and whenever you call <see cref="Sync"/>.
@@ -43,6 +46,8 @@ namespace TwiceSDK.Wallet
         {
             public Func<double> Get;
             public Func<double, bool> Apply;
+            public string Name;   // shown in the panel ("" = derived from the key)
+            public int Decimals;  // 0 = whole numbers; the panel validates amounts with it
         }
 
         internal static readonly Dictionary<string, Currency> Currencies = new Dictionary<string, Currency>();
@@ -63,7 +68,10 @@ namespace TwiceSDK.Wallet
         /// applied; return false to refuse (e.g. not enough to remove) — the panel then shows the
         /// grant as rejected. Called on the main thread.
         /// </param>
-        public static void Register(string currency, Func<double> getBalance, Func<double, bool> apply)
+        /// <param name="displayName">Name shown in the panel (e.g. "Gems"). Optional.</param>
+        /// <param name="decimals">Decimal places the currency uses (0-4). 0 = whole numbers.</param>
+        public static void Register(string currency, Func<double> getBalance, Func<double, bool> apply,
+                                    string displayName = null, int decimals = 0)
         {
             try
             {
@@ -77,7 +85,13 @@ namespace TwiceSDK.Wallet
                     Debug.LogWarning("[TwiceWallet] Register('" + currency + "'): getBalance and apply are required.");
                     return;
                 }
-                Currencies[currency] = new Currency { Get = getBalance, Apply = apply };
+                Currencies[currency] = new Currency
+                {
+                    Get = getBalance,
+                    Apply = apply,
+                    Name = displayName ?? "",
+                    Decimals = Mathf.Clamp(decimals, 0, 4),
+                };
                 TwiceWalletRunner.EnsureExists();
                 TwiceWalletRunner.Instance.ScheduleFirstSync();
             }
@@ -219,7 +233,16 @@ namespace TwiceSDK.Wallet
             if (!string.IsNullOrEmpty(uid) && !string.IsNullOrEmpty(apiKey))
             {
                 _lastSyncUtc = DateTime.UtcNow;
-                string url = baseUrl + "/sdk/wallet/grants?user_id=" + UnityWebRequest.EscapeURL(uid);
+                // The registered currencies ride along: the panel's currency list is built from them.
+                var cur = new JArray();
+                foreach (var kv in TwiceWallet.Currencies)
+                {
+                    var o = new JObject { ["key"] = kv.Key, ["decimals"] = kv.Value.Decimals };
+                    if (!string.IsNullOrEmpty(kv.Value.Name)) o["name"] = kv.Value.Name;
+                    cur.Add(o);
+                }
+                string url = baseUrl + "/sdk/wallet/grants?user_id=" + UnityWebRequest.EscapeURL(uid)
+                           + "&currencies=" + UnityWebRequest.EscapeURL(cur.ToString(Newtonsoft.Json.Formatting.None));
                 JArray grants = null;
                 using (var req = UnityWebRequest.Get(url))
                 {
