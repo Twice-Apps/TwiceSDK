@@ -3,6 +3,26 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-10-04
+### Added
+- **Wallet** (`TwiceSDK.Wallet.TwiceWallet`): lets the Twice panel give or take a player's in-game
+  currency and shows balances in the panel. The game stays the owner of the balance: register each
+  currency once with a getter and an apply callback —
+  `TwiceWallet.Register("coin", () => Coins, delta => { AddCoins(delta); return true; })`.
+  The SDK pulls the grants queued for the player (`GET /sdk/wallet/grants`) shortly after the first
+  `Register`, on every resume (at most once a minute) and on `TwiceWallet.Sync()`, applies them
+  through the callback and acknowledges them as analytics events (`wallet_grant_applied` /
+  `wallet_grant_rejected`, so acks ride the offline-safe queue). Applied grant ids are remembered in
+  PlayerPrefs (`twice_wallet_done`) — a grant is never applied twice. Balances are reported as a
+  `wallet_balance` event when they changed (`twice_wallet_last`). `OnGrantApplied` event for UI.
+- Nothing happens until the first `Register` call; no new settings toggle.
+
+## [1.7.0] - 2026-09-24
+### Added
+- Analytics: events logged before init are buffered and replayed; an open session left by a killed
+  process is closed on the next launch (`session_end` with `recovered: true`); `session_heartbeat`
+  every 2 minutes while in the foreground.
+
 ## [1.6.0] - 2026-09-03
 ### Added
 - **A/B experiments** on top of Remote Config. The config fetch now identifies the player

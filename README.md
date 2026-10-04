@@ -105,10 +105,33 @@ TwiceRemoteConfig.OnExperimentChanged += a => Debug.Log(a == null ? "left experi
 ```
 Do not set `ab_group` yourself any more — the SDK owns it.
 
+## Wallet (panel gives / takes currency)
+The panel (Wallet module, or Players → player) queues grants — "+100 coin", "−50 gem" — for a
+player. The game owns the balance, so it registers each currency once; the SDK pulls the player's
+grants, applies them through your callback and reports back.
+
+```csharp
+using TwiceSDK.Wallet;
+
+TwiceWallet.Register("coin",
+    () => CurrencyManager.Instance.Coins,                 // current balance
+    delta => {                                            // + give / − take; save it
+        if (delta < 0 && CurrencyManager.Instance.Coins < -delta) return false; // refuse → "rejected"
+        CurrencyManager.Instance.AddMoney(delta);
+        return true;
+    });
+TwiceWallet.OnGrantApplied += g => Toast($"+{g.Amount} {g.Currency}");
+TwiceWallet.Sync();   // optional: e.g. when the shop opens (also automatic on start/resume)
+```
+The key (`"coin"`) must match the currency key in the panel. Grants for a currency this build did
+not register stay queued (a later build can apply them). Acks and balances travel as analytics
+events (`wallet_grant_applied`, `wallet_grant_rejected`, `wallet_balance`).
+
 ## Namespaces
 - `TwiceSDK` — shared settings (`TwiceSettings`, `EnvironmentMode`).
 - `TwiceSDK.Analytics` — `TwiceAnalytics`.
 - `TwiceSDK.RemoteConfig` — `TwiceRemoteConfig`.
+- `TwiceSDK.Wallet` — `TwiceWallet`.
 
 ## Adapting to a game (bridge pattern)
 This package is **game-agnostic** — it only exposes the `TwiceAnalytics.*` / `TwiceRemoteConfig.*`
@@ -125,6 +148,8 @@ server status while in Play Mode. Editor-only; never ships with a build.
 - `GET  {endpointBaseUrl}/sdk/config`  — headers `X-App-Key` (+ `X-User-Id`, `X-First-Open` when analytics
   is on); returns `{ ok, version, config }`, plus `experiment` (`{ id, variant, rev, source }` or `null`)
   for identified players.
+- `GET  {endpointBaseUrl}/sdk/wallet/grants?user_id=` — header `X-App-Key`; returns `{ ok, grants:
+  [{ id, currency, amount, note, created_at }] }` (pending + delivered-but-unacknowledged).
 
 ## Versioning
 Public `TwiceAnalytics.*` / `TwiceRemoteConfig.*` methods are the API contract. Changes follow
