@@ -1,8 +1,17 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Scripting;
 using Firebase;
 using Firebase.Messaging;
 using TwiceSDK;
+
+// Nothing references this assembly statically: its only entry point is the
+// RuntimeInitializeOnLoadMethod below. Without this attribute the IL2CPP linker drops the whole
+// assembly — and Firebase with it — from Android player builds, so no device ever registered a
+// token (it ran in the Editor, vanished on device; the iOS integration hit the same issue and lives
+// in the core assembly for that reason). AlwaysLinkAssembly makes the linker process it anyway;
+// [Preserve] keeps the bootstrap rooted.
+[assembly: AlwaysLinkAssembly]
 
 namespace TwiceSDK.Push
 {
@@ -12,11 +21,13 @@ namespace TwiceSDK.Push
     /// scripting define is set (auto-managed by Editor/TwicePushDefineSync.cs when Firebase
     /// Messaging is imported and push is enabled). Auto-runs at boot on Android.
     /// </summary>
+    [Preserve]
     internal class TwicePushAndroid : MonoBehaviour
     {
         static TwicePushAndroid _instance;
         volatile string _pendingToken; // set on a Firebase background thread, consumed in Update
 
+        [Preserve]
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void AutoBootstrap()
         {

@@ -3,6 +3,15 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.2] - 2026-10-07
+### Fixed
+- **Android push never registered a device.** `TwiceSDK.Push.Android` is referenced by nothing (its
+  only entry point is a `RuntimeInitializeOnLoadMethod`), so the IL2CPP linker removed the whole
+  assembly — and Firebase with it — from Android player builds: no FCM token was ever sent, in any
+  game (every registered device in the panel was iOS). The assembly is now marked
+  `[assembly: AlwaysLinkAssembly]` and the bootstrap `[Preserve]`d. No API or setup change; rebuild
+  the Android player to pick it up.
+
 ## [1.8.1] - 2026-10-04
 ### Changed
 - **Wallet currencies are defined by the game.** `TwiceWallet.Register` takes an optional
