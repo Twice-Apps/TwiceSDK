@@ -3,6 +3,17 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-10-09
+### Added
+- **Twice Package Hub** (`Twice → Twice Package Hub`, editor-only assembly
+  `TwiceSDK.PackageManager.Editor`): the team's `.unitypackage` library hosted on twicehub instead
+  of GitHub — browse, import any version with dependencies, update, remove by recorded guids,
+  publish from project folders (chunked, sha256-verified), and bulk-download + upload the whole
+  Asset Store library of the signed-in Unity account. Admin-only: a machine must be approved in the
+  panel ("Twicehub ile bağlan") before anything is visible. No runtime or API change for games.
+- **`Twice → Twice SDK Settings`** menu: selects the project's `TwiceSettings` asset (creating
+  `Assets/Resources/TwiceSettings.asset` if missing) and shows it in the Inspector.
+
 ## [1.8.2] - 2026-10-07
 ### Fixed
 - **Android push never registered a device.** `TwiceSDK.Push.Android` is referenced by nothing (its

@@ -19,7 +19,7 @@ This pulls the latest commit. Once you tag releases you can pin a version (e.g. 
 reproducible builds.
 
 ## Setup
-1. `Assets → Create → Twice → SDK Settings`.
+1. `Twice → Twice SDK Settings` (creates `Assets/Resources/TwiceSettings.asset` if missing and opens it), or `Assets → Create → Twice → SDK Settings`.
 2. Move the asset into a `Resources` folder, keep the name `TwiceSettings`
    (e.g. `Assets/Resources/TwiceSettings.asset`) so it auto-initialises at boot.
 3. Paste your project key (`X-App-Key`) into the `apiKey` field
@@ -144,6 +144,30 @@ game's own events (level system, IAP, ads) to `TwiceAnalytics` and applies confi
 ## Editor debugger
 `Twice → Analytics Debugger` — compose/fire events, toggle consent, watch the live queue and last
 server status while in Play Mode. Editor-only; never ships with a build.
+
+## Twice Package Hub (team asset store)
+`Twice → Twice Package Hub` — the team's own `.unitypackage` library, hosted on twicehub
+(`hub.twiceapps.co`), not GitHub. Editor-only, its own assembly (`TwiceSDK.PackageManager.Editor`,
+references nothing in the runtime); never ships with a build.
+
+- **Admins only.** The window shows nothing but *Twicehub ile bağlan* until this machine is
+  connected: it opens the panel's approval page, an admin presses *Onayla*, the token arrives by
+  itself (per person, per machine, EditorPrefs only — never in the project). Panel ▸ Twice Packages ▸
+  *Bağlı bilgisayarlarım* revokes a machine; a revoked or demoted user drops back to the connect screen.
+- **Göz at / Yüklü** — catalog with categories, versions, changelogs; import any version with its
+  dependencies (Twice packages + UPM ids); every asset a package installed is recorded by guid in
+  `ProjectSettings/TwicePackages.json`, so *Kaldır* and clean updates remove exactly that.
+- **Yükle** — new package or new version, exported straight from project folders or from a
+  `.unitypackage`; 8 MB chunks, sha256 verified on the server, up to 4 GB per version.
+- **Toplu yükle** — *Sahip olduklarımı listele* reads the whole Asset Store library of the signed-in
+  Unity account; *Eksikleri indir ve yükle* downloads what is neither on the server nor on disk with
+  Unity's own downloader, then uploads it with name / version / publisher / category read from the
+  package. Anything a teammate already uploaded is skipped. Also scans any folder of `.unitypackage`s.
+  Uses Package Manager internals (verified on Unity 6000.0 and 6000.3); on a Unity where they differ
+  the section says so and the folder scan still works.
+- Downloads are cached machine-wide (`%LOCALAPPDATA%/TwicePackages`, macOS `~/Library/Caches/TwicePackages`).
+
+Server side lives in twicehub-web: `includes/packages.php`, `hub/packages_api.php`, `hub/packages.php`.
 
 ## Backend
 - `POST {endpointBaseUrl}/sdk/events` — headers `X-App-Key` + `Content-Type: application/json`.
