@@ -51,7 +51,6 @@ namespace TwiceSDK.PackageManager
         Texture2D _upImagePreview;
 
         // settings
-        string _tokenField;
         string _me = "";
 
         GUIStyle _h1, _h2, _wrap, _mini, _miniWrap, _card, _cardSel, _badge, _side, _sideSel, _center;
@@ -70,7 +69,6 @@ namespace TwiceSDK.PackageManager
             _tab = (Tab)TpSettings.GetInt("Tab", 0);
             _sort = (Sort)TpSettings.GetInt("Sort", 0);
             _grid = TpSettings.GetInt("Grid", 1) == 1;
-            _tokenField = TpSettings.Token;
             if (string.IsNullOrEmpty(_upUnity)) _upUnity = UnityMajorMinor();
             TpCatalog.Changed += Repaint;
             TpInstaller.Changed += Repaint;
@@ -189,7 +187,6 @@ namespace TwiceSDK.PackageManager
         string _connCode, _connPoll, _connUrl;
         DateTime _connUntil;
         TpCancel _connCancel;
-        bool _connManual;
 
         void DrawConnect()
         {
@@ -226,25 +223,6 @@ namespace TwiceSDK.PackageManager
                 Repaint();
             }
 
-            GUILayout.Space(14);
-            string hub = EditorGUILayout.TextField("Hub adresi", TpSettings.HubUrl);
-            if (hub != TpSettings.HubUrl) { TpSettings.HubUrl = hub; TpCatalog.ResetForHubChange(); }
-            _connManual = EditorGUILayout.Foldout(_connManual, "Otomatik bağlanma çalışmazsa: token'ı elle yapıştır", true);
-            if (_connManual)
-            {
-                GUILayout.Label("Panel ▸ Diğer ▸ Twice Packages ▸ 'Otomatik bağlanma çalışmazsa' ▸ Token üret.", _miniWrap);
-                EditorGUILayout.BeginHorizontal();
-                _tokenField = EditorGUILayout.PasswordField(_tokenField ?? "");
-                if (GUILayout.Button("Bağlan", GUILayout.Width(70)) && !string.IsNullOrEmpty(_tokenField))
-                {
-                    TpSettings.Token = _tokenField.Trim();
-                    _tokenField = "";
-                    GUI.FocusControl(null);
-                    Run(TestConnection());
-                }
-                EditorGUILayout.EndHorizontal();
-                if (GUILayout.Button("Paneli aç ↗", EditorStyles.linkLabel)) Application.OpenURL(TpSettings.HubBase + "/packages.php");
-            }
             EditorGUILayout.EndVertical();
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
@@ -1112,8 +1090,6 @@ namespace TwiceSDK.PackageManager
             GUILayout.Space(8);
             GUILayout.Label("Bağlantı", _h2);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            string hub = EditorGUILayout.TextField("Hub adresi", TpSettings.HubUrl);
-            if (hub != TpSettings.HubUrl) { TpSettings.HubUrl = hub; TpCatalog.ResetForHubChange(); }
             string who = !string.IsNullOrEmpty(_me) ? _me : !string.IsNullOrEmpty(TpSettings.ConnectedAs) ? "Bağlı: " + TpSettings.ConnectedAs : "Bağlı";
             GUILayout.Label(who + (TpSettings.UsingPlayTwiceToken ? " (bu projenin PlayTwice token'ı)" : " · " + TpSettings.MachineLabel), EditorStyles.miniBoldLabel);
             EditorGUILayout.BeginHorizontal();

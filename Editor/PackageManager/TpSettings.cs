@@ -14,24 +14,8 @@ namespace TwiceSDK.PackageManager
     public static class TpSettings
     {
         const string P = "TwicePackages.";
-        public const string DefaultHub = "https://hub.twiceapps.co";
-
-        public static string HubUrl
-        {
-            get { return EditorPrefs.GetString(P + "HubUrl", DefaultHub); }
-            set { EditorPrefs.SetString(P + "HubUrl", (value ?? "").Trim()); }
-        }
-
-        public static string HubBase
-        {
-            get
-            {
-                string u = (HubUrl ?? "").Trim();
-                if (u.Length == 0) u = DefaultHub;
-                if (!u.StartsWith("http", StringComparison.OrdinalIgnoreCase)) u = "https://" + u;
-                return u.TrimEnd('/');
-            }
-        }
+        /// <summary>Fixed on purpose: there is one twicehub, and a settable address is a place to point a token at the wrong server.</summary>
+        public const string HubBase = "https://hub.twiceapps.co";
 
         public static string Token
         {

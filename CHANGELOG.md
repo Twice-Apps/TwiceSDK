@@ -3,6 +3,12 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.1] - 2026-10-09
+### Changed
+- **Twice Package Hub**: the hub address is fixed to `https://hub.twiceapps.co` (no address field)
+  and the manual token paste is gone — a machine connects only through *Twicehub ile bağlan* +
+  approval in the panel.
+
 ## [1.9.0] - 2026-10-09
 ### Added
 - **Twice Package Hub** (`Twice → Twice Package Hub`, editor-only assembly
