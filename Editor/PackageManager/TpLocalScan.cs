@@ -31,6 +31,33 @@ namespace TwiceSDK.PackageManager
             public string UnityVersion;
             public bool FromAssetStore;
             public string Slug;
+            public bool IsFolder;       // a plain asset folder, packed at upload (TpPacker)
+        }
+
+        /// <summary>Each immediate subfolder that holds Unity content is one asset (folder-kept assets).</summary>
+        public static List<Item> ScanFolders(string root)
+        {
+            var list = new List<Item>();
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return list;
+            foreach (var d in Directory.GetDirectories(root))
+            {
+                string n = System.IO.Path.GetFileName(d);
+                if (n.StartsWith(".") || n.EndsWith("~")) continue;
+                if (Directory.GetFiles(d, "*.unitypackage", SearchOption.TopDirectoryOnly).Length > 0) continue;   // packages are scanned as files
+                if (!TpPacker.LooksLikeAsset(d)) continue;
+                var m = System.Text.RegularExpressions.Regex.Match(n, @"^(.*?)[\s_\-]+v?(\d+(?:\.\d+){1,3})$");
+                string title = m.Success ? m.Groups[1].Value : n;
+                var it = new Item
+                {
+                    Path = d.Replace('\\', '/'), Size = TpPacker.FolderSize(d), Title = title.Trim(),
+                    Version = m.Success ? m.Groups[2].Value : "1.0.0", IsFolder = true
+                };
+                it.Slug = TpFormat.Slugify(it.Title);
+                if (it.Slug.Length < 2) it.Slug = "pkg-" + it.Slug;
+                list.Add(it);
+            }
+            list.Sort((a, b) => string.Compare(a.Title, b.Title, StringComparison.OrdinalIgnoreCase));
+            return list;
         }
 
         [Serializable] public class AsLabel { public string label; public string id; }

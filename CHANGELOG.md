@@ -3,6 +3,27 @@
 All notable changes to the Twice SDK are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] - 2026-10-09
+### Changed
+- **Twice Package Hub** redesigned in UI Toolkit: tabs (Kütüphane / Twice / Yüklü / Yükle / Toplu
+  yükle / Ayarlar), category sidebar with Asset Store subcategories, card and list views, colored
+  placeholders, detail panel with version picker.
+### Added
+- One category tree for everyone (Asset Store categories + subcategories), filterable by both.
+- Versions of the same asset live under one package; the default install is the version marked
+  *recommended*, else the newest one not marked *broken*.
+- Per-package notes and per-version note + status (recommended / broken), visible to the team and
+  to Claude.
+- Twice tab for the studio's own assets; *deprecated* flag (shown dimmed, never re-proposed by bulk
+  upload).
+- Same asset under different names on different machines: uploads are matched against the library
+  (Asset Store id, name key, similarity, aliases, then Claude on the server) and land as a new
+  version of the existing package; admins can merge duplicates.
+- Uploading an existing version asks before overwriting.
+- Plain asset folders (not `.unitypackage`) can be uploaded; they are packed with stable guids.
+- No AI key ever reaches the editor: identification runs on twicehub (Claude via workload identity
+  federation).
+
 ## [1.9.1] - 2026-10-09
 ### Changed
 - **Twice Package Hub**: the hub address is fixed to `https://hub.twiceapps.co` (no address field)

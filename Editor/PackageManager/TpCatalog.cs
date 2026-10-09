@@ -33,6 +33,22 @@ namespace TwiceSDK.PackageManager
 
         public static List<TpPackage> Packages { get { return Cache.packages ?? (Cache.packages = new List<TpPackage>()); } }
         public static bool IsSuper { get { return Cache.super; } }
+
+        static readonly string[] DefaultCategories = { "3D", "2D", "Audio", "Tools", "VFX", "Templates", "SDKs", "Other" };
+
+        /// <summary>The hub's fixed category list (server-side canonical); one dropdown everywhere.</summary>
+        public static string[] Categories
+        {
+            get { var c = Cache.categories; return c != null && c.Length > 0 ? c : DefaultCategories; }
+        }
+
+        /// <summary>Subcategories of a category (Asset Store tree, server-side canonical).</summary>
+        public static string[] Subcategories(string category)
+        {
+            if (Cache.taxonomy != null)
+                foreach (var n in Cache.taxonomy) if (n.name == category) return n.subs ?? new string[0];
+            return new string[0];
+        }
         public static string User { get { return Cache.user; } }
 
         public static TpPackage Find(string slug)
@@ -84,6 +100,8 @@ namespace TwiceSDK.PackageManager
                     rev = r.Data.rev,
                     user = r.Data.user,
                     super = r.Data.super,
+                    categories = r.Data.categories ?? new string[0],
+                    taxonomy = r.Data.taxonomy ?? new List<TpCategoryNode>(),
                     fetchedAt = DateTime.UtcNow.ToString("o"),
                     packages = r.Data.packages ?? new List<TpPackage>()
                 };

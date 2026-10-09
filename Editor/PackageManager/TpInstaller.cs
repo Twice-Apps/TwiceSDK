@@ -84,7 +84,10 @@ namespace TwiceSDK.PackageManager
         public static bool HasUpdate(TpPackage p)
         {
             var i = Installed(p.slug);
-            return i != null && !string.IsNullOrEmpty(p.latest) && TpSemVer.Compare(p.latest, i.version) > 0;
+            // "Update" means the default version (recommended, else newest not broken) is newer:
+            // a broken newest release is not offered as an update.
+            var d = p.Default;
+            return i != null && d != null && TpSemVer.Compare(d.version, i.version) > 0;
         }
 
         /* ======================================================== planning === */
@@ -143,7 +146,7 @@ namespace TwiceSDK.PackageManager
                     if (dp == null) { plan.Problems.Add(p.DisplayName + " → '" + slug + "' katalogda yok."); continue; }
                     var inst = Installed(slug);
                     if (inst != null && (min.Length == 0 || TpSemVer.Compare(inst.version, min) >= 0)) continue;
-                    var dv = dp.Latest;
+                    var dv = dp.Default;   // recommended, else newest not broken
                     if (dv == null) { plan.Problems.Add(slug + " için sürüm yok."); continue; }
                     if (min.Length > 0 && TpSemVer.Compare(dv.version, min) < 0)
                     {

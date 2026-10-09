@@ -1,96 +1,130 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
+using UnityEngine.UIElements;
+using static TwiceSDK.PackageManager.TpUi;
 
 namespace TwiceSDK.PackageManager
 {
-    /// <summary>Twice ▸ Twice Package Hub — browse, install, publish.</summary>
+    /// <summary>Twice ▸ Twice Package Hub — the team's asset library (UI Toolkit).</summary>
     public sealed partial class TpWindow : EditorWindow
     {
-        enum Tab { Browse = 0, Installed = 1, Upload = 2, Settings = 3, Bulk = 4 }
-        enum Sort { Name = 0, Newest = 1, Downloads = 2 }
-        static readonly string[] SortLabels = { "Ad", "En yeni", "En çok indirilen" };
+        enum Tab { Library = 0, Twice = 1, Installed = 2, Upload = 3, Bulk = 4, Settings = 5 }
+        static readonly string[] TabLabels = { "Kütüphane", "Twice", "Yüklü", "Yükle", "Toplu yükle", "Ayarlar" };
 
-        // sidebar pseudo-categories
         const string CatAll = "\u0001all", CatInstalled = "\u0001inst", CatUpdates = "\u0001upd", CatFav = "\u0001fav", CatMine = "\u0001mine";
-
-        const float SideW = 190f, DetailW = 340f, CardW = 176f, CardH = 214f;
+        const string UssPath = "Packages/co.twiceapps.sdk/Editor/PackageManager/TpWindow.uss";
 
         Tab _tab;
         string _search = "";
         string _cat = CatAll;
-        Sort _sort;
+        string _sub = "";
+        string _sort = "Ad";
         bool _grid = true;
-        Vector2 _sideScroll, _listScroll, _detailScroll, _tabScroll;
+        bool _showDeprecated = true;
         string _selected;
         string _status = "";
         bool _statusError;
         bool _busy;
-        int _versionPick;
-        bool _showVersions;
-
-        // edit
-        bool _editing;
-        TpMetaUpdateRequest _edit;
-        string _editTags;
-
-        // upload form
-        bool _upNew = true;
-        int _upTarget;
-        bool _upFromFile;
-        string _upFile = "";
-        List<string> _upPaths = new List<string>();
-        bool _upIncludeDeps;
-        string _upName = "", _upSlug = "", _upVersion = "1.0.0", _upCategory = "", _upPublisher = "", _upDesc = "",
-            _upTags = "", _upStoreUrl = "", _upUnity = "", _upChangelog = "", _upDeps = "", _upUpm = "", _upImage = "";
-        bool _upSlugTouched;
-        Texture2D _upImagePreview;
-
-        // settings
         string _me = "";
 
-        GUIStyle _h1, _h2, _wrap, _mini, _miniWrap, _card, _cardSel, _badge, _side, _sideSel, _center;
+        VisualElement _root, _header, _content, _statusBar;
+        Label _statusLabel;
+        IVisualElementScheduledItem _rebuildJob;
+        readonly Dictionary<string, Vector2> _scroll = new Dictionary<string, Vector2>();
 
         [MenuItem("Twice/Twice Package Hub", false, 0)]
         public static void Open()
         {
             var w = GetWindow<TpWindow>();
             w.titleContent = new GUIContent("Twice Package Hub", EditorGUIUtility.IconContent("Prefab Icon").image);
-            w.minSize = new Vector2(900, 520);
+            w.minSize = new Vector2(960, 560);
             w.Show();
         }
 
         void OnEnable()
         {
-            _tab = (Tab)TpSettings.GetInt("Tab", 0);
-            _sort = (Sort)TpSettings.GetInt("Sort", 0);
+            _tab = (Tab)Mathf.Clamp(TpSettings.GetInt("Tab2", 0), 0, 5);
             _grid = TpSettings.GetInt("Grid", 1) == 1;
-            if (string.IsNullOrEmpty(_upUnity)) _upUnity = UnityMajorMinor();
-            TpCatalog.Changed += Repaint;
-            TpInstaller.Changed += Repaint;
+            _showDeprecated = TpSettings.GetInt("ShowDep", 1) == 1;
+            TpCatalog.Changed += QueueRebuild;
+            TpInstaller.Changed += QueueRebuild;
             if (TpSettings.HasToken) Run(RefreshCatalog(false));
-            else _tab = Tab.Settings;
         }
 
         void OnDisable()
         {
-            TpCatalog.Changed -= Repaint;
-            TpInstaller.Changed -= Repaint;
-            TpSettings.SetInt("Tab", (int)_tab);
-            TpSettings.SetInt("Sort", (int)_sort);
+            TpCatalog.Changed -= QueueRebuild;
+            TpInstaller.Changed -= QueueRebuild;
+            TpSettings.SetInt("Tab2", (int)_tab);
             TpSettings.SetInt("Grid", _grid ? 1 : 0);
+            TpSettings.SetInt("ShowDep", _showDeprecated ? 1 : 0);
         }
 
-        /* ============================================================ helpers === */
-
-        static string UnityMajorMinor()
+        public void CreateGUI()
         {
-            var p = Application.unityVersion.Split('.');
-            return p.Length >= 2 ? p[0] + "." + p[1] : Application.unityVersion;
+            _root = rootVisualElement;
+            _root.Clear();
+            var sheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(UssPath);
+            if (sheet != null) _root.styleSheets.Add(sheet);
+            _root.AddToClassList("tp-root");
+            _root.AddToClassList(EditorGUIUtility.isProSkin ? "tp-dark" : "tp-light");
+
+            _header = El("tp-header");
+            _content = El("tp-grow");
+            _statusBar = El("tp-status");
+            _statusLabel = L("", "tp-grow");
+            _statusBar.Add(_statusLabel);
+            _statusBar.Add(L(TpSettings.HubBase.Replace("https://", ""), "tp-faint"));
+            _root.Add(_header);
+            _root.Add(_content);
+            _root.Add(_statusBar);
+            RebuildAll();
+        }
+
+        /* ============================================================ plumbing === */
+
+        void QueueRebuild()
+        {
+            if (_root == null) return;
+            if (_rebuildJob != null) _rebuildJob.Pause();
+            _rebuildJob = _root.schedule.Execute(RebuildAll).StartingIn(30);
+        }
+
+        void RebuildAll()
+        {
+            if (_root == null || _content == null) return;
+            BuildHeader();
+            RememberScroll();
+            _content.Clear();
+            if (!TpSettings.HasToken) { _content.Add(BuildConnect()); UpdateStatus(); return; }
+            switch (_tab)
+            {
+                case Tab.Library: _content.Add(BuildLibrary(false)); break;
+                case Tab.Twice: _content.Add(BuildLibrary(true)); break;
+                case Tab.Installed: _content.Add(BuildInstalled()); break;
+                case Tab.Upload: _content.Add(BuildUpload()); break;
+                case Tab.Bulk: _content.Add(BuildBulk()); break;
+                default: _content.Add(BuildSettings()); break;
+            }
+            RestoreScroll();
+            UpdateStatus();
+        }
+
+        /* ScrollViews are recreated on rebuild; their offsets are kept by name. */
+        void RememberScroll()
+        {
+            _content.Query<ScrollView>().ForEach(sv => { if (!string.IsNullOrEmpty(sv.name)) _scroll[sv.name] = sv.scrollOffset; });
+        }
+
+        void RestoreScroll()
+        {
+            _content.schedule.Execute(() =>
+                _content.Query<ScrollView>().ForEach(sv => { Vector2 o; if (!string.IsNullOrEmpty(sv.name) && _scroll.TryGetValue(sv.name, out o)) sv.scrollOffset = o; }));
         }
 
         void SetStatus(string msg, bool error = false)
@@ -98,15 +132,22 @@ namespace TwiceSDK.PackageManager
             _status = msg ?? "";
             _statusError = error;
             if (error && !string.IsNullOrEmpty(msg)) TpLog.Warn(msg);
-            Repaint();
+            UpdateStatus();
         }
 
-        /// <summary>Runs an async UI action; exceptions end up in the status bar instead of vanishing.</summary>
+        void UpdateStatus()
+        {
+            if (_statusLabel == null) return;
+            _statusLabel.text = (_busy || TpInstaller.Busy ? "⏳  " : "") + _status;
+            _statusBar.EnableInClassList("tp-status--error", _statusError);
+        }
+
+        /// <summary>Runs an async UI action; exceptions land in the status bar instead of vanishing.</summary>
         async void Run(Task t)
         {
             try { await t; }
             catch (Exception e) { SetStatus(e.Message, true); Debug.LogException(e); }
-            finally { _busy = false; Repaint(); }
+            finally { _busy = false; UpdateStatus(); QueueRebuild(); }
         }
 
         async Task RefreshCatalog(bool force)
@@ -122,111 +163,85 @@ namespace TwiceSDK.PackageManager
             return p != null && (TpCatalog.IsSuper || (!string.IsNullOrEmpty(TpCatalog.User) && p.createdBy == TpCatalog.User));
         }
 
-        void EnsureStyles()
+        void Go(Tab t) { _tab = t; RebuildAll(); }
+
+        /* ============================================================== header === */
+
+        void BuildHeader()
         {
-            if (_h1 != null) return;
-            _h1 = new GUIStyle(EditorStyles.boldLabel) { fontSize = 15, wordWrap = true };
-            _h2 = new GUIStyle(EditorStyles.boldLabel) { fontSize = 12 };
-            _wrap = new GUIStyle(EditorStyles.label) { wordWrap = true, richText = false };
-            _mini = new GUIStyle(EditorStyles.miniLabel) { clipping = TextClipping.Clip };
-            _miniWrap = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
-            _card = new GUIStyle("HelpBox") { padding = new RectOffset(8, 8, 8, 8), margin = new RectOffset(4, 4, 4, 4) };
-            _cardSel = new GUIStyle(_card);
-            _cardSel.normal.background = MakeTex(new Color(0.24f, 0.45f, 0.75f, 0.35f));
-            _badge = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleCenter, padding = new RectOffset(5, 5, 1, 1) };
-            _badge.normal.textColor = Color.white;
-            _side = new GUIStyle(EditorStyles.label) { padding = new RectOffset(10, 6, 3, 3), fixedHeight = 22 };
-            _sideSel = new GUIStyle(_side) { fontStyle = FontStyle.Bold };
-            _sideSel.normal.background = MakeTex(new Color(0.24f, 0.45f, 0.75f, 0.45f));
-            _center = new GUIStyle(EditorStyles.centeredGreyMiniLabel) { wordWrap = true };
-        }
+            _header.Clear();
+            _header.Add(El("tp-brand-dot"));
+            _header.Add(L("Twice Package Hub", "tp-brand"));
+            if (!TpSettings.HasToken) return;
 
-        static Texture2D MakeTex(Color c)
-        {
-            var t = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
-            t.SetPixel(0, 0, c);
-            t.Apply();
-            return t;
-        }
-
-        void Badge(string text, Color c, params GUILayoutOption[] opts)
-        {
-            var r = GUILayoutUtility.GetRect(new GUIContent(text), _badge, opts);
-            EditorGUI.DrawRect(r, c);
-            GUI.Label(r, text, _badge);
-        }
-
-        static readonly Color Green = new Color(0.18f, 0.55f, 0.3f), Orange = new Color(0.8f, 0.45f, 0.1f), Blue = new Color(0.24f, 0.45f, 0.75f), Grey = new Color(0.35f, 0.35f, 0.35f);
-
-        /* ============================================================== GUI === */
-
-        void OnGUI()
-        {
-            EnsureStyles();
-            if (!TpSettings.HasToken)
+            int updates = TpCatalog.Packages.Count(p => TpInstaller.HasUpdate(p));
+            for (int i = 0; i < TabLabels.Length; i++)
             {
-                // Not connected: nothing else is reachable — no catalog, no tabs.
-                DrawConnect();
-                DrawStatusBar();
-                return;
+                var t = (Tab)i;
+                var b = Btn(TabLabels[i], () => Go(t), "tp-tab" + (_tab == t ? " tp-tab--active" : ""));
+                if (t == Tab.Installed && updates > 0) b.Add(L(updates.ToString(), "tp-tab-badge"));
+                _header.Add(b);
             }
-            DrawToolbar();
-            switch (_tab)
+            _header.Add(Flex());
+            if (_tab == Tab.Library || _tab == Tab.Twice)
             {
-                case Tab.Browse: DrawBrowse(); break;
-                case Tab.Installed: DrawInstalled(); break;
-                case Tab.Upload: DrawUpload(); break;
-                case Tab.Bulk: DrawBulk(); break;
-                default: DrawSettings(); break;
+                var s = new ToolbarSearchField();
+                s.AddToClassList("tp-search");
+                s.value = _search;
+                IVisualElementScheduledItem job = null;
+                s.RegisterValueChangedCallback(e =>
+                {
+                    _search = e.newValue;
+                    if (job != null) job.Pause();
+                    job = s.schedule.Execute(() => { RebuildAll(); }).StartingIn(220);
+                });
+                _header.Add(s);
+                if (!string.IsNullOrEmpty(_search)) s.schedule.Execute(() => s.Q<TextField>()?.Focus());
             }
-            DrawStatusBar();
+            var refresh = IconBtn("Refresh", "Kataloğu yenile", () => Run(RefreshCatalog(true)));
+            refresh.SetEnabled(!_busy);
+            _header.Add(refresh);
         }
 
-        /* =========================================================== connect === */
+        /* ============================================================= connect === */
 
         string _connCode, _connPoll, _connUrl;
         DateTime _connUntil;
         TpCancel _connCancel;
 
-        void DrawConnect()
+        VisualElement BuildConnect()
         {
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.BeginVertical(GUILayout.Width(460));
-            GUILayout.Label("Twice Packages", _h1);
-            GUILayout.Label("Bu bilgisayar twicehub'a bağlı değil. Paketleri görmek için twicehub hesabınla bağla — tarayıcıda onay ekranı açılır, Onayla'ya basınca bağlantı bu bilgisayara kendiliğinden gelir.", _wrap);
-            GUILayout.Space(10);
-
+            var wrap = El("tp-empty");
+            var box = El("tp-connect");
+            box.Add(L("Bu bilgisayar bağlı değil", "tp-h1"));
+            box.Add(Space(6));
+            box.Add(L("Kütüphaneyi görmek için twicehub hesabınla bağla. Tarayıcıda onay ekranı açılır; Onayla'ya basınca bağlantı bu bilgisayara kendiliğinden gelir. Yalnız yöneticiler bağlanabilir.", "tp-text tp-muted"));
+            box.Add(Space(16));
             if (_connCode == null)
             {
-                var bg = GUI.backgroundColor;
-                GUI.backgroundColor = new Color(0.45f, 0.75f, 1f);
-                GUI.enabled = !_busy;
-                if (GUILayout.Button("Twicehub ile bağlan", GUILayout.Height(34))) Run(Connect());
-                GUI.enabled = true;
-                GUI.backgroundColor = bg;
+                var b = Btn("Twicehub ile bağlan", () => Run(Connect()), "tp-btn tp-btn--primary tp-btn--block");
+                b.style.height = 36;
+                b.SetEnabled(!_busy);
+                box.Add(b);
             }
             else
             {
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                GUILayout.Label("Tarayıcıda onay bekleniyor. Panelde gördüğün kod bununla aynı olmalı:", _miniWrap);
-                var big = new GUIStyle(EditorStyles.boldLabel) { fontSize = 24, alignment = TextAnchor.MiddleCenter };
-                GUILayout.Label(_connCode, big, GUILayout.Height(36));
-                int left = Math.Max(0, (int)(_connUntil - DateTime.UtcNow).TotalSeconds);
-                GUILayout.Label("Kalan süre: " + (left / 60) + ":" + (left % 60).ToString("00"), _center);
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("Onay sayfasını yeniden aç")) Application.OpenURL(_connUrl);
-                if (GUILayout.Button("Vazgeç") && _connCancel != null) _connCancel.Requested = true;
-                EditorGUILayout.EndHorizontal();
-                EditorGUILayout.EndVertical();
-                Repaint();
+                box.Add(L("Tarayıcıda onay bekleniyor. Panelde gördüğün kod bununla aynı olmalı:", "tp-text tp-muted"));
+                box.Add(L(_connCode, "tp-code"));
+                var left = L("", "tp-muted");
+                left.style.unityTextAlign = TextAnchor.MiddleCenter;
+                left.schedule.Execute(() =>
+                {
+                    int s = Math.Max(0, (int)(_connUntil - DateTime.UtcNow).TotalSeconds);
+                    left.text = "Kalan süre " + (s / 60) + ":" + (s % 60).ToString("00");
+                }).Every(500);
+                box.Add(left);
+                box.Add(Space(12));
+                box.Add(Row("", Btn("Onay sayfasını yeniden aç", () => Application.OpenURL(_connUrl), "tp-btn tp-btn--block"),
+                    Btn("Vazgeç", () => { if (_connCancel != null) _connCancel.Requested = true; })));
             }
-
-            EditorGUILayout.EndVertical();
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-            GUILayout.FlexibleSpace();
+            wrap.Add(box);
+            return wrap;
         }
 
         async Task Connect()
@@ -242,6 +257,8 @@ namespace TwiceSDK.PackageManager
             _connCancel = new TpCancel();
             Application.OpenURL(_connUrl);
             SetStatus("Tarayıcıda onayla…");
+            _busy = false;
+            RebuildAll();
             try
             {
                 while (DateTime.UtcNow < _connUntil && !_connCancel.Requested)
@@ -255,8 +272,8 @@ namespace TwiceSDK.PackageManager
                         TpSettings.Token = p.Data.token;
                         TpSettings.ConnectedAs = p.Data.user;
                         _connCode = null;
+                        _tab = Tab.Library;
                         await TestConnection();
-                        _tab = Tab.Browse;
                         return;
                     }
                     if (p.Data.status == "expired") { SetStatus("Bağlantı isteği reddedildi ya da süresi doldu.", true); return; }
@@ -271,100 +288,41 @@ namespace TwiceSDK.PackageManager
             }
         }
 
+        async Task TestConnection()
+        {
+            _busy = true;
+            SetStatus("Bağlanılıyor…");
+            var r = await TpHub.Get<TpMeResponse>("me");
+            if (!r.Ok) { _me = ""; SetStatus(r.Error, true); return; }
+            TpSettings.ConnectedAs = r.Data.user + (r.Data.super ? " (yönetici)" : "");
+            _me = "Bağlı: " + TpSettings.ConnectedAs;
+            SetStatus(_me);
+            await RefreshCatalog(false);
+        }
+
         void Disconnect()
         {
-            if (!EditorUtility.DisplayDialog("Twice Packages", "Bu bilgisayarın bağlantısı kesilsin mi? Tekrar bağlanmak için panel onayı gerekir. (Sunucudaki kaydı tamamen silmek için: panel ▸ Twice Packages ▸ Bağlı bilgisayarlarım.)", "Bağlantıyı kes", "Vazgeç")) return;
+            if (!EditorUtility.DisplayDialog("Twice Package Hub", "Bu bilgisayarın bağlantısı kesilsin mi? Tekrar bağlanmak için panel onayı gerekir.", "Bağlantıyı kes", "Vazgeç")) return;
             TpSettings.Token = "";
             TpSettings.ConnectedAs = "";
             TpCatalog.Forget();
             _selected = null;
             SetStatus("Bağlantı kesildi.");
+            RebuildAll();
         }
 
-        void DrawToolbar()
-        {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            int updates = TpCatalog.Packages.Count(p => TpInstaller.HasUpdate(p));
-            string inst = "Yüklü (" + TpInstaller.State.installed.Count + ")" + (updates > 0 ? " • " + updates + " güncelleme" : "");
-            if (GUILayout.Toggle(_tab == Tab.Browse, "Göz at", EditorStyles.toolbarButton, GUILayout.Width(70))) _tab = Tab.Browse;
-            if (GUILayout.Toggle(_tab == Tab.Installed, inst, EditorStyles.toolbarButton)) _tab = Tab.Installed;
-            if (GUILayout.Toggle(_tab == Tab.Upload, "Yükle", EditorStyles.toolbarButton, GUILayout.Width(60))) _tab = Tab.Upload;
-            if (GUILayout.Toggle(_tab == Tab.Bulk, "Toplu yükle", EditorStyles.toolbarButton, GUILayout.Width(80))) _tab = Tab.Bulk;
-            if (GUILayout.Toggle(_tab == Tab.Settings, "Ayarlar", EditorStyles.toolbarButton, GUILayout.Width(66))) _tab = Tab.Settings;
-            GUILayout.FlexibleSpace();
-            if (_tab == Tab.Browse)
-                _search = GUILayout.TextField(_search, EditorStyles.toolbarSearchField, GUILayout.Width(230));
-            GUI.enabled = !_busy && TpSettings.HasToken;
-            if (GUILayout.Button(new GUIContent(EditorGUIUtility.IconContent("Refresh").image, "Kataloğu yenile"), EditorStyles.toolbarButton, GUILayout.Width(30)))
-                Run(RefreshCatalog(true));
-            GUI.enabled = true;
-            EditorGUILayout.EndHorizontal();
-        }
+        /* ============================================================= library === */
 
-        void DrawStatusBar()
+        IEnumerable<TpPackage> Scope(bool twiceOnly)
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            var c = GUI.color;
-            if (_statusError) GUI.color = new Color(1f, 0.55f, 0.5f);
-            GUILayout.Label((_busy || TpInstaller.Busy ? "⏳ " : "") + _status, EditorStyles.miniLabel);
-            GUI.color = c;
-            GUILayout.FlexibleSpace();
-            GUILayout.Label(TpSettings.HubBase.Replace("https://", ""), EditorStyles.miniLabel);
-            EditorGUILayout.EndHorizontal();
-        }
-
-        /* ============================================================ browse === */
-
-        void DrawBrowse()
-        {
-            EditorGUILayout.BeginHorizontal();
-            DrawSidebar();
-            EditorGUILayout.BeginVertical();
-            DrawListHeader();
-            DrawList();
-            EditorGUILayout.EndVertical();
-            var sel = TpCatalog.Find(_selected);
-            if (sel != null)
-            {
-                EditorGUILayout.BeginVertical(GUILayout.Width(DetailW));
-                DrawDetails(sel);
-                EditorGUILayout.EndVertical();
-            }
-            EditorGUILayout.EndHorizontal();
-        }
-
-        void DrawSidebar()
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(SideW), GUILayout.ExpandHeight(true));
-            _sideScroll = EditorGUILayout.BeginScrollView(_sideScroll);
-            var all = TpCatalog.Packages;
-            SideItem(CatAll, "Tümü", all.Count);
-            SideItem(CatInstalled, "Bu projede yüklü", all.Count(p => TpInstaller.Installed(p.slug) != null));
-            int upd = all.Count(p => TpInstaller.HasUpdate(p));
-            if (upd > 0) SideItem(CatUpdates, "Güncelleme var", upd);
-            var fav = TpSettings.Favorites;
-            SideItem(CatFav, "★ Favoriler", all.Count(p => fav.Contains(p.slug)));
-            if (!string.IsNullOrEmpty(TpCatalog.User)) SideItem(CatMine, "Benim yüklediklerim", all.Count(p => p.createdBy == TpCatalog.User));
-            GUILayout.Space(8);
-            GUILayout.Label("Kategoriler", EditorStyles.miniBoldLabel);
-            foreach (var g in all.Where(p => !string.IsNullOrEmpty(p.category)).GroupBy(p => p.category, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key))
-                SideItem(g.Key, g.Key, g.Count());
-            int none = all.Count(p => string.IsNullOrEmpty(p.category));
-            if (none > 0) SideItem("", "Kategorisiz", none);
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
-        }
-
-        void SideItem(string key, string label, int count)
-        {
-            bool on = string.Equals(_cat, key, StringComparison.OrdinalIgnoreCase);
-            if (GUILayout.Button(label + "  (" + count + ")", on ? _sideSel : _side)) { _cat = key; _listScroll = Vector2.zero; }
-        }
-
-        List<TpPackage> Filtered()
-        {
-            var fav = TpSettings.Favorites;
             IEnumerable<TpPackage> q = TpCatalog.Packages;
+            return twiceOnly ? q.Where(p => p.IsTwice) : q;
+        }
+
+        List<TpPackage> Filtered(bool twiceOnly)
+        {
+            var fav = TpSettings.Favorites;
+            var q = Scope(twiceOnly);
             switch (_cat)
             {
                 case CatAll: break;
@@ -372,366 +330,464 @@ namespace TwiceSDK.PackageManager
                 case CatUpdates: q = q.Where(p => TpInstaller.HasUpdate(p)); break;
                 case CatFav: q = q.Where(p => fav.Contains(p.slug)); break;
                 case CatMine: q = q.Where(p => p.createdBy == TpCatalog.User); break;
-                default: q = q.Where(p => string.Equals(p.category ?? "", _cat, StringComparison.OrdinalIgnoreCase)); break;
+                default:
+                    q = q.Where(p => string.Equals(p.category ?? "", _cat, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(_sub)) q = q.Where(p => string.Equals(p.subcategory ?? "", _sub, StringComparison.OrdinalIgnoreCase));
+                    break;
             }
+            if (!_showDeprecated) q = q.Where(p => !p.deprecated);
             string s = (_search ?? "").Trim();
             if (s.Length > 0)
-            {
                 q = q.Where(p => Has(p.name, s) || Has(p.slug, s) || Has(p.publisher, s) || Has(p.description, s) || Has(p.category, s) ||
-                                 (p.tags != null && p.tags.Any(t => Has(t, s))));
-            }
+                                 Has(p.subcategory, s) || Has(p.notes, s) || (p.tags != null && p.tags.Any(t => Has(t, s))));
+            IOrderedEnumerable<TpPackage> o;
+            // Deprecated always sinks to the bottom, whatever the sort.
             switch (_sort)
             {
-                case Sort.Newest: q = q.OrderByDescending(p => p.updatedAt ?? ""); break;
-                case Sort.Downloads: q = q.OrderByDescending(p => p.downloads); break;
-                default: q = q.OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase); break;
+                case "En yeni": o = q.OrderBy(p => p.deprecated).ThenByDescending(p => p.updatedAt ?? ""); break;
+                case "En çok indirilen": o = q.OrderBy(p => p.deprecated).ThenByDescending(p => p.downloads); break;
+                default: o = q.OrderBy(p => p.deprecated).ThenBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase); break;
             }
-            return q.ToList();
+            return o.ToList();
         }
 
         static bool Has(string hay, string needle) { return !string.IsNullOrEmpty(hay) && hay.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0; }
 
-        void DrawListHeader()
+        VisualElement BuildLibrary(bool twiceOnly)
         {
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            GUILayout.Label("Sırala", EditorStyles.miniLabel, GUILayout.Width(36));
-            _sort = (Sort)EditorGUILayout.Popup((int)_sort, SortLabels, EditorStyles.toolbarPopup, GUILayout.Width(130));
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Toggle(_grid, new GUIContent("▦", "Izgara"), EditorStyles.toolbarButton, GUILayout.Width(28))) _grid = true;
-            if (GUILayout.Toggle(!_grid, new GUIContent("☰", "Liste"), EditorStyles.toolbarButton, GUILayout.Width(28))) _grid = false;
-            EditorGUILayout.EndHorizontal();
-        }
+            var body = El("tp-body");
+            body.Add(BuildSidebar(twiceOnly));
 
-        void DrawList()
-        {
-            var list = Filtered();
-            _listScroll = EditorGUILayout.BeginScrollView(_listScroll);
+            var main = El("tp-main");
+            var list = Filtered(twiceOnly);
+
+            var bar = El("tp-toolbar");
+            bar.Add(L(twiceOnly && _cat == CatAll ? "Twice asset'leri" : SideTitle(), "tp-toolbar-title"));
+            bar.Add(L("  " + list.Count + " paket", "tp-muted"));
+            bar.Add(Flex());
+            var sort = Dropdown(null, new List<string> { "Ad", "En yeni", "En çok indirilen" }, _sort, v => { _sort = v; RebuildAll(); });
+            sort.style.width = 150;
+            bar.Add(sort);
+            var depT = Check("Deprecated", _showDeprecated, v => { _showDeprecated = v; RebuildAll(); });
+            depT.style.marginLeft = 8;
+            bar.Add(depT);
+            var mode = Btn(_grid ? "☰" : "▦", () => { _grid = !_grid; RebuildAll(); }, "tp-icon-btn");
+            mode.tooltip = _grid ? "Liste görünümü" : "Kart görünümü";
+            bar.Add(mode);
+            main.Add(bar);
+
+            var sv = new ScrollView(ScrollViewMode.Vertical) { name = twiceOnly ? "lib-twice" : "lib-all" };
+            sv.style.flexGrow = 1;
             if (list.Count == 0)
             {
-                GUILayout.Space(40);
-                GUILayout.Label(TpCatalog.Packages.Count == 0 ? "Katalog boş. İlk paketi Yükle sekmesinden gönder." : "Eşleşen paket yok.", _center);
+                sv.Add(Empty(TpCatalog.Packages.Count == 0 ? "Kütüphane boş" : "Eşleşen paket yok",
+                    TpCatalog.Packages.Count == 0
+                        ? "İlk paketleri Yükle ya da Toplu yükle sekmesinden gönder. Asset Store kütüphaneni toplu yüklemeden tek seferde çekebilirsin."
+                        : (twiceOnly ? "Twice köklü paket yok. Bir pakete köken olarak Twice ver (detay ▸ Düzenle)." : "Aramayı ya da kategoriyi değiştir.")));
             }
             else if (_grid)
             {
-                float avail = position.width - SideW - (TpCatalog.Find(_selected) != null ? DetailW : 0f) - 30f;
-                int cols = Mathf.Max(1, Mathf.FloorToInt(avail / (CardW + 8f)));
-                for (int i = 0; i < list.Count; i += cols)
-                {
-                    EditorGUILayout.BeginHorizontal();
-                    for (int j = i; j < Mathf.Min(i + cols, list.Count); j++) DrawCard(list[j]);
-                    GUILayout.FlexibleSpace();
-                    EditorGUILayout.EndHorizontal();
-                }
+                var grid = El("tp-grid");
+                foreach (var p in list) grid.Add(Card(p));
+                sv.Add(grid);
             }
             else
             {
-                foreach (var p in list) DrawRow(p);
+                var l = El("tp-list");
+                foreach (var p in list) l.Add(ListRow(p));
+                sv.Add(l);
             }
-            EditorGUILayout.EndScrollView();
+            main.Add(sv);
+            body.Add(main);
+
+            var sel = TpCatalog.Find(_selected);
+            if (sel != null && (!twiceOnly || sel.IsTwice)) body.Add(BuildDetail(sel));
+            return body;
         }
+
+        string SideTitle()
+        {
+            switch (_cat)
+            {
+                case CatAll: return "Tüm paketler";
+                case CatInstalled: return "Bu projede yüklü";
+                case CatUpdates: return "Güncelleme var";
+                case CatFav: return "Favoriler";
+                case CatMine: return "Benim yüklediklerim";
+                default: return string.IsNullOrEmpty(_sub) ? _cat : _cat + " › " + _sub;
+            }
+        }
+
+        VisualElement BuildSidebar(bool twiceOnly)
+        {
+            var side = new ScrollView(ScrollViewMode.Vertical) { name = "side" };
+            side.AddToClassList("tp-sidebar");
+            var all = Scope(twiceOnly).ToList();
+            var fav = TpSettings.Favorites;
+            side.Add(SideItem(CatAll, "", "Tümü", all.Count));
+            side.Add(SideItem(CatInstalled, "", "Bu projede yüklü", all.Count(p => TpInstaller.Installed(p.slug) != null)));
+            int upd = all.Count(p => TpInstaller.HasUpdate(p));
+            if (upd > 0) side.Add(SideItem(CatUpdates, "", "Güncelleme var", upd));
+            side.Add(SideItem(CatFav, "", "Favoriler", all.Count(p => fav.Contains(p.slug))));
+            if (!string.IsNullOrEmpty(TpCatalog.User)) side.Add(SideItem(CatMine, "", "Benim yüklediklerim", all.Count(p => p.createdBy == TpCatalog.User)));
+            side.Add(L("KATEGORİLER", "tp-side-title"));
+            // taxonomy order first, then anything the server still has under an older name
+            var cats = new List<string>(TpCatalog.Categories);
+            foreach (var x in all.Select(p => p.category).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x))
+                if (!cats.Any(c => string.Equals(c, x, StringComparison.OrdinalIgnoreCase))) cats.Add(x);
+            foreach (var c in cats)
+            {
+                var inCat = all.Where(p => string.Equals(p.category, c, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (inCat.Count == 0 && _cat != c) continue;
+                side.Add(SideItem(c, "", c, inCat.Count));
+                if (_cat != c) continue;
+                // the open category lists its subcategories (only those that have packages)
+                foreach (var g in inCat.Where(p => !string.IsNullOrEmpty(p.subcategory)).GroupBy(p => p.subcategory).OrderBy(g => g.Key))
+                {
+                    var it = SideItem(c, g.Key, g.Key, g.Count());
+                    it.style.paddingLeft = 24;
+                    side.Add(it);
+                }
+            }
+            return side;
+        }
+
+        VisualElement SideItem(string key, string sub, string label, int count)
+        {
+            bool on = string.Equals(_cat, key, StringComparison.OrdinalIgnoreCase) && string.Equals(_sub ?? "", sub ?? "", StringComparison.OrdinalIgnoreCase);
+            var e = El("tp-side-item" + (on ? " tp-side-item--active" : ""), L(label), L(count.ToString(), "tp-side-count"));
+            e.RegisterCallback<ClickEvent>(_ => { _cat = key; _sub = sub ?? ""; _scroll.Remove("lib-all"); _scroll.Remove("lib-twice"); RebuildAll(); });
+            return e;
+        }
+
+        VisualElement Empty(string title, string text)
+        {
+            return El("tp-empty", L(title, "tp-empty-title"), L(text, "tp-empty-text"));
+        }
+
+        VisualElement StatusChip(TpPackage p)
+        {
+            var inst = TpInstaller.Installed(p.slug);
+            if (p.deprecated) return Chip("DEPRECATED", "dep");
+            if (inst == null) return null;
+            if (TpInstaller.HasUpdate(p)) return Chip("v" + inst.version + " → v" + p.latest, "warn");
+            return Chip("yüklü", "ok");
+        }
+
+        VisualElement Card(TpPackage p)
+        {
+            var card = El("tp-card" + (p.slug == _selected ? " tp-card--selected" : "") + (p.deprecated ? " tp-card--deprecated" : ""));
+            var img = El("tp-card-img");
+            SetImage(img, p);
+            card.Add(img);
+            var body = El("tp-card-body");
+            body.Add(L(p.DisplayName, "tp-card-title"));
+            body.Add(L((string.IsNullOrEmpty(p.publisher) ? p.createdBy : p.publisher) + " · " + p.CategoryLabel, "tp-card-sub"));
+            var foot = El("tp-card-foot");
+            var left = Row();
+            var def = p.Default;
+            left.Add(Chip("v" + (def != null ? def.version : p.latest)));
+            if (p.versions != null && p.versions.Count > 1) left.Add(Chip(p.versions.Count + " sürüm"));
+            if (p.IsTwice) left.Add(Chip("TWICE", "twice"));
+            foot.Add(left);
+            var st = StatusChip(p);
+            if (st != null) foot.Add(st);
+            body.Add(foot);
+            card.Add(body);
+            card.RegisterCallback<ClickEvent>(e =>
+            {
+                if (e.clickCount == 2) { Install(p, p.Default); return; }
+                Select(p);
+            });
+            card.tooltip = string.IsNullOrEmpty(p.description) ? p.DisplayName : p.description;
+            return card;
+        }
+
+        VisualElement ListRow(TpPackage p)
+        {
+            var row = El("tp-list-row" + (p.deprecated ? " tp-card--deprecated" : ""));
+            var th = El("tp-list-thumb");
+            SetImage(th, p);
+            row.Add(th);
+            var mid = El("tp-grow");
+            mid.Add(L(p.DisplayName, "tp-bold"));
+            var def = p.Default;
+            mid.Add(L((string.IsNullOrEmpty(p.publisher) ? p.createdBy : p.publisher) + " · " + p.CategoryLabel + " · " + TpFormat.Size(def != null ? def.size : 0), "tp-muted tp-small"));
+            row.Add(mid);
+            row.Add(Chip("v" + (def != null ? def.version : p.latest)));
+            if (p.IsTwice) row.Add(Chip("TWICE", "twice"));
+            var st = StatusChip(p);
+            if (st != null) row.Add(st);
+            var inst = TpInstaller.Installed(p.slug);
+            var b = Btn(inst == null ? "İçe aktar" : TpInstaller.HasUpdate(p) ? "Güncelle" : "Yeniden", () => Install(p, p.Default), "tp-btn tp-btn--small");
+            b.SetEnabled(!TpInstaller.Busy);
+            row.Add(b);
+            row.RegisterCallback<ClickEvent>(e => { if (e.target == b) return; Select(p); });
+            return row;
+        }
+
+        string _pickedVersion;
+        bool _editing;
+        string _noteEditVersion;
+        string _noteDraft;
 
         void Select(TpPackage p)
         {
             _selected = _selected == p.slug ? null : p.slug;
+            _pickedVersion = null;
             _editing = false;
-            _versionPick = 0;
-            _detailScroll = Vector2.zero;
-            GUI.FocusControl(null);
+            _noteEditVersion = null;
+            _scroll.Remove("detail");
+            RebuildAll();
         }
 
-        void DrawCard(TpPackage p)
-        {
-            bool sel = p.slug == _selected;
-            var r = EditorGUILayout.BeginVertical(sel ? _cardSel : _card, GUILayout.Width(CardW), GUILayout.Height(CardH));
-            var img = GUILayoutUtility.GetRect(CardW - 16, 104, GUILayout.ExpandWidth(true));
-            DrawImage(img, p, ScaleMode.ScaleAndCrop);
-            if (TpSettings.Favorites.Contains(p.slug)) GUI.Label(new Rect(img.xMax - 20, img.y + 2, 18, 18), "★", EditorStyles.boldLabel);
-            GUILayout.Space(4);
-            GUILayout.Label(p.DisplayName, EditorStyles.boldLabel, GUILayout.MaxWidth(CardW - 16));
-            GUILayout.Label((string.IsNullOrEmpty(p.publisher) ? p.createdBy : p.publisher) + " · v" + p.latest, _mini, GUILayout.MaxWidth(CardW - 16));
-            GUILayout.Label(TpFormat.Size(p.Latest != null ? p.Latest.size : 0) + " · " + p.downloads + " indirme", _mini, GUILayout.MaxWidth(CardW - 16));
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.BeginHorizontal();
-            StatusBadge(p);
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-            if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
-            {
-                Select(p);
-                if (Event.current.clickCount == 2) Install(p, p.Latest);
-                Event.current.Use();
-            }
-        }
+        /* --------------------------------------------------------------- detail --- */
 
-        void DrawRow(TpPackage p)
+        VisualElement BuildDetail(TpPackage p)
         {
-            bool sel = p.slug == _selected;
-            var r = EditorGUILayout.BeginHorizontal(sel ? _cardSel : _card, GUILayout.Height(52));
-            var img = GUILayoutUtility.GetRect(64, 40, GUILayout.Width(64), GUILayout.Height(40));
-            DrawImage(img, p, ScaleMode.ScaleAndCrop);
-            EditorGUILayout.BeginVertical();
-            GUILayout.Label(p.DisplayName + "   v" + p.latest, EditorStyles.boldLabel);
-            GUILayout.Label((string.IsNullOrEmpty(p.category) ? "" : p.category + " · ") + (string.IsNullOrEmpty(p.publisher) ? p.createdBy : p.publisher) +
-                            " · " + TpFormat.Size(p.Latest != null ? p.Latest.size : 0) + " · " + p.downloads + " indirme", _mini);
-            EditorGUILayout.EndVertical();
-            GUILayout.FlexibleSpace();
-            StatusBadge(p);
-            GUI.enabled = !TpInstaller.Busy;
-            var inst = TpInstaller.Installed(p.slug);
-            string label = inst == null ? "İçe aktar" : TpInstaller.HasUpdate(p) ? "Güncelle" : "Yeniden";
-            if (GUILayout.Button(label, GUILayout.Width(80), GUILayout.Height(22))) Install(p, p.Latest);
-            GUI.enabled = true;
-            EditorGUILayout.EndHorizontal();
-            if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
-            {
-                Select(p);
-                Event.current.Use();
-            }
-        }
+            var panel = El("tp-detail");
+            var hero = El("tp-detail-hero");
+            SetImage(hero, p);
+            panel.Add(hero);
+            panel.Add(Btn("✕", () => { _selected = null; RebuildAll(); }, "tp-close"));
 
-        void StatusBadge(TpPackage p)
-        {
-            var inst = TpInstaller.Installed(p.slug);
-            if (inst == null) return;
-            if (TpInstaller.HasUpdate(p)) Badge("v" + inst.version + " → v" + p.latest, Orange);
-            else Badge("yüklü v" + inst.version, Green);
-        }
+            var sv = new ScrollView(ScrollViewMode.Vertical) { name = "detail" };
+            sv.style.flexGrow = 1;
+            var b = El("tp-detail-body");
+            sv.Add(b);
+            panel.Add(sv);
 
-        void DrawImage(Rect r, TpPackage p, ScaleMode mode)
-        {
-            var tex = TpCatalog.Image(p);
-            if (tex != null) GUI.DrawTexture(r, tex, mode);
-            else
-            {
-                EditorGUI.DrawRect(r, EditorGUIUtility.isProSkin ? new Color(0.17f, 0.17f, 0.17f) : new Color(0.8f, 0.8f, 0.8f));
-                var icon = EditorGUIUtility.IconContent("Prefab Icon");
-                if (icon != null && icon.image != null)
-                {
-                    float s = Mathf.Min(32, r.height - 8);
-                    GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), icon.image, ScaleMode.ScaleToFit, true, 0, new Color(1, 1, 1, 0.35f), 0, 0);
-                }
-            }
-        }
+            if (_editing) { BuildEdit(b, p); return panel; }
 
-        /* ----------------------------------------------------------- details --- */
-
-        void DrawDetails(TpPackage p)
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.ExpandHeight(true));
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
+            var chips = Row("tp-wrap");
+            chips.Add(Chip(p.category ?? "Other", "accent"));
+            if (!string.IsNullOrEmpty(p.subcategory)) chips.Add(Chip(p.subcategory));
+            chips.Add(Chip(TpOrigin.Label(p.origin), p.IsTwice ? "twice" : ""));
+            if (p.deprecated) chips.Add(Chip("DEPRECATED", "dep"));
+            b.Add(chips);
+            b.Add(Space(8));
+            var titleRow = Row();
+            titleRow.Add(L(p.DisplayName, "tp-h1 tp-grow"));
             bool fav = TpSettings.Favorites.Contains(p.slug);
-            if (GUILayout.Button(new GUIContent(fav ? "★" : "☆", fav ? "Favorilerden çıkar" : "Favorilere ekle"), EditorStyles.label, GUILayout.Width(18)))
-                TpSettings.SetFavorite(p.slug, !fav);
-            if (GUILayout.Button("×", EditorStyles.label, GUILayout.Width(14))) { _selected = null; EditorGUILayout.EndHorizontal(); EditorGUILayout.EndVertical(); return; }
-            EditorGUILayout.EndHorizontal();
+            var favB = Btn(fav ? "★" : "☆", () => { TpSettings.SetFavorite(p.slug, !fav); RebuildAll(); }, "tp-icon-btn");
+            favB.tooltip = fav ? "Favorilerden çıkar" : "Favorilere ekle";
+            titleRow.Add(favB);
+            b.Add(titleRow);
+            b.Add(L((string.IsNullOrEmpty(p.publisher) ? "" : p.publisher + " · ") + p.slug, "tp-muted"));
 
-            _detailScroll = EditorGUILayout.BeginScrollView(_detailScroll);
-            var img = GUILayoutUtility.GetRect(DetailW - 30, 170, GUILayout.ExpandWidth(true));
-            DrawImage(img, p, ScaleMode.ScaleToFit);
-            GUILayout.Space(6);
+            if (p.deprecated)
+                b.Add(L("Deprecated" + (string.IsNullOrEmpty(p.deprecatedNote) ? " — yeni projelerde kullanma." : ": " + p.deprecatedNote), "tp-callout tp-callout--dep"));
+            if (!string.IsNullOrEmpty(p.notes)) b.Add(L("📝  " + p.notes, "tp-callout"));
 
-            if (_editing) DrawEditForm(p);
-            else DrawInfo(p);
-
-            EditorGUILayout.EndScrollView();
-            EditorGUILayout.EndVertical();
-        }
-
-        void DrawInfo(TpPackage p)
-        {
-            GUILayout.Label(p.DisplayName, _h1);
-            GUILayout.Label(p.slug + " · v" + p.latest, EditorStyles.miniLabel);
-            GUILayout.Space(6);
-
+            // ---- one card per asset: default = recommended (else newest not broken), any other on demand
             var inst = TpInstaller.Installed(p.slug);
-            var latest = p.Latest;
-            GUI.enabled = !TpInstaller.Busy && latest != null;
-            var bg = GUI.backgroundColor;
-            GUI.backgroundColor = new Color(0.45f, 0.75f, 1f);
-            string primary = inst == null ? "İçe aktar  v" + p.latest
-                : TpInstaller.HasUpdate(p) ? "Güncelle  v" + inst.version + " → v" + p.latest
-                : "Yeniden içe aktar  v" + p.latest;
-            if (GUILayout.Button(primary, GUILayout.Height(28))) Install(p, latest);
-            GUI.backgroundColor = bg;
+            var versions = p.versions ?? new List<TpVersion>();
+            var pv = p.Find(_pickedVersion) ?? p.Default;
+            b.Add(Space(14));
+            if (versions.Count > 1)
+            {
+                var labels = versions.Select(v => VersionLabel(p, v, inst)).ToList();
+                var dd = new DropdownField("Sürüm", labels, Math.Max(0, versions.FindIndex(v => pv != null && v.version == pv.version)));
+                dd.AddToClassList("tp-field");
+                dd.RegisterValueChangedCallback(e => { int i = labels.IndexOf(e.newValue); if (i >= 0) { _pickedVersion = versions[i].version; RebuildAll(); } });
+                b.Add(dd);
+            }
+            if (pv != null && pv.IsBroken) b.Add(L("Bu sürüm bozuk işaretli" + (string.IsNullOrEmpty(pv.note) ? "." : ": " + pv.note), "tp-callout tp-callout--warn"));
+            else if (pv != null && !string.IsNullOrEmpty(pv.note)) b.Add(L("v" + pv.version + ": " + pv.note, "tp-callout"));
+            string action = pv == null ? "İçe aktar"
+                : inst == null ? "İçe aktar  v" + pv.version
+                : inst.version == pv.version ? "Yeniden içe aktar  v" + pv.version
+                : TpSemVer.Compare(pv.version, inst.version) > 0 ? "Güncelle  v" + inst.version + " → v" + pv.version
+                : "Bu sürüme geç  v" + pv.version;
+            var main = Btn(action, () => Install(p, pv), "tp-btn tp-btn--primary tp-btn--block");
+            main.style.height = 34;
+            main.style.marginTop = 8;
+            main.SetEnabled(pv != null && !TpInstaller.Busy);
+            b.Add(main);
             if (inst != null)
             {
-                if (GUILayout.Button("Projeden kaldır (v" + inst.version + ")", GUILayout.Height(22)))
+                b.Add(Space(6));
+                b.Add(Btn("Projeden kaldır (v" + inst.version + ")", () =>
                 {
                     string err = TpInstaller.Uninstall(p.slug);
                     SetStatus(err ?? (p.DisplayName + " kaldırıldı."), err != null && err != "Vazgeçildi.");
-                }
+                }, "tp-btn tp-btn--block tp-btn--danger"));
             }
-            if (p.versions != null && p.versions.Count > 1)
-            {
-                EditorGUILayout.BeginHorizontal();
-                var labels = p.versions.Select(v => v.version + (inst != null && inst.version == v.version ? "  (yüklü)" : "")).ToArray();
-                _versionPick = Mathf.Clamp(_versionPick, 0, labels.Length - 1);
-                _versionPick = EditorGUILayout.Popup(_versionPick, labels);
-                if (GUILayout.Button("Bu sürümü kur", GUILayout.Width(100))) Install(p, p.versions[_versionPick]);
-                EditorGUILayout.EndHorizontal();
-            }
-            GUI.enabled = true;
-            string warn = TpInstaller.UnityWarning(latest);
-            if (warn.Length > 0) EditorGUILayout.HelpBox(warn, MessageType.Warning);
+            string warn = TpInstaller.UnityWarning(pv);
+            if (warn.Length > 0) b.Add(L(warn, "tp-callout tp-callout--warn"));
 
-            GUILayout.Space(8);
-            KV("Kategori", string.IsNullOrEmpty(p.category) ? "-" : p.category);
-            KV("Yayıncı", string.IsNullOrEmpty(p.publisher) ? "-" : p.publisher);
-            KV("Yükleyen", p.createdBy);
-            KV("Güncellendi", TpFormat.Date(p.updatedAt));
-            KV("Boyut", latest != null ? TpFormat.Size(latest.size) : "-");
-            KV("İndirme", p.downloads.ToString());
-            if (latest != null && !string.IsNullOrEmpty(latest.unity)) KV("Unity", latest.unity + "+");
-            if (!string.IsNullOrEmpty(p.assetStoreUrl) && GUILayout.Button("Asset Store sayfası ↗", EditorStyles.linkLabel)) Application.OpenURL(p.assetStoreUrl);
-
-            if (!string.IsNullOrEmpty(p.description))
-            {
-                GUILayout.Space(8);
-                GUILayout.Label(p.description, _wrap);
-            }
+            if (!string.IsNullOrEmpty(p.description)) b.Add(Section("Açıklama", L(p.description, "tp-text")));
             if (p.tags != null && p.tags.Length > 0)
             {
-                GUILayout.Space(6);
-                GUILayout.Label(string.Join("  ·  ", p.tags), _miniWrap);
+                var t = Row("tp-wrap");
+                foreach (var tag in p.tags) t.Add(Chip(tag));
+                b.Add(Section("Etiketler", t));
             }
 
-            if (latest != null && ((latest.dependencies != null && latest.dependencies.Length > 0) || (latest.upmDependencies != null && latest.upmDependencies.Length > 0)))
+            var info = Section("Bilgi",
+                KV("Kategori", p.CategoryLabel),
+                KV("Yayıncı", p.publisher),
+                KV("Yükleyen", p.createdBy),
+                KV("Güncellendi", TpFormat.Date(p.updatedAt)),
+                KV("Boyut", pv != null ? TpFormat.Size(pv.size) : null),
+                KV("İndirme", p.downloads.ToString()),
+                pv != null && !string.IsNullOrEmpty(pv.unity) ? KV("Unity", pv.unity + "+") : null);
+            if (!string.IsNullOrEmpty(p.assetStoreUrl))
+                info.Add(Btn("Asset Store sayfası ↗", () => Application.OpenURL(p.assetStoreUrl), "tp-link"));
+            b.Add(info);
+
+            if (pv != null && ((pv.dependencies != null && pv.dependencies.Length > 0) || (pv.upmDependencies != null && pv.upmDependencies.Length > 0)))
             {
-                GUILayout.Space(8);
-                GUILayout.Label("Bağımlılıklar", _h2);
-                if (latest.dependencies != null)
-                    foreach (var d in latest.dependencies)
+                var deps = Section("Bağımlılıklar");
+                if (pv.dependencies != null)
+                    foreach (var d in pv.dependencies)
                     {
                         var ds = d.Split('@')[0];
                         var di = TpInstaller.Installed(ds);
-                        GUILayout.Label("• " + d + (di != null ? "  ✓ v" + di.version : TpCatalog.Find(ds) == null ? "  (katalogda yok)" : ""), _miniWrap);
+                        deps.Add(L("• " + d + (di != null ? "   ✓ v" + di.version : TpCatalog.Find(ds) == null ? "   (katalogda yok)" : ""), "tp-text"));
                     }
-                if (latest.upmDependencies != null)
-                    foreach (var d in latest.upmDependencies) GUILayout.Label("• UPM: " + d, _miniWrap);
+                if (pv.upmDependencies != null) foreach (var d in pv.upmDependencies) deps.Add(L("• UPM  " + d, "tp-text"));
+                b.Add(deps);
             }
 
-            GUILayout.Space(8);
-            _showVersions = EditorGUILayout.Foldout(_showVersions, "Sürümler (" + (p.versions != null ? p.versions.Count : 0) + ")", true);
-            if (_showVersions && p.versions != null)
+            b.Add(BuildVersions(p, versions, inst));
+            b.Add(BuildManage(p));
+            return panel;
+        }
+
+        static string VersionLabel(TpPackage p, TpVersion v, TpInstalled inst)
+        {
+            string s = v.version;
+            if (v.IsRecommended) s += "  ✓ önerilen";
+            else if (v.version == p.latest) s += "  (en yeni)";
+            if (v.IsBroken) s += "  ✗ bozuk";
+            if (inst != null && inst.version == v.version) s += "  · yüklü";
+            return s;
+        }
+
+        VisualElement BuildVersions(TpPackage p, List<TpVersion> versions, TpInstalled inst)
+        {
+            var vs = Section("Sürümler (" + versions.Count + ")");
+            bool admin = CanEdit(p);
+            foreach (var v in versions)
             {
-                foreach (var v in p.versions)
+                var vv = v;
+                var card = El("tp-version" + (inst != null && inst.version == v.version ? " tp-version--current" : ""));
+                var top = Row();
+                top.Add(L("v" + v.version, "tp-bold"));
+                if (v.IsRecommended) top.Add(Chip("önerilen", "ok"));
+                if (v.IsBroken) top.Add(Chip("bozuk", "danger"));
+                if (v.version == p.latest && !v.IsRecommended) top.Add(Chip("en yeni", "accent"));
+                if (inst != null && inst.version == v.version) top.Add(Chip("yüklü"));
+                top.Add(Flex());
+                top.Add(L(TpFormat.Size(v.size), "tp-muted tp-small"));
+                card.Add(top);
+                card.Add(L(TpFormat.Date(v.uploadedAt) + " · " + v.uploadedBy, "tp-faint tp-small"));
+                if (!string.IsNullOrEmpty(v.changelog)) card.Add(L(v.changelog, "tp-text tp-small"));
+                if (!string.IsNullOrEmpty(v.note) && _noteEditVersion != v.version) card.Add(L("📝 " + v.note, "tp-text tp-small"));
+
+                if (admin && _noteEditVersion == v.version)
                 {
-                    EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                    EditorGUILayout.BeginHorizontal();
-                    GUILayout.Label("v" + v.version, EditorStyles.boldLabel);
-                    GUILayout.FlexibleSpace();
-                    GUILayout.Label(TpFormat.Size(v.size), EditorStyles.miniLabel);
-                    if (CanEdit(p) && p.versions.Count > 1 && GUILayout.Button(new GUIContent("Sil", "Bu sürümü sunucudan sil"), EditorStyles.miniButton, GUILayout.Width(32)))
-                        Run(DeleteVersion(p, v));
-                    EditorGUILayout.EndHorizontal();
-                    GUILayout.Label(TpFormat.Date(v.uploadedAt) + " · " + v.uploadedBy + " · " + v.downloads + " indirme", _mini);
-                    if (!string.IsNullOrEmpty(v.changelog)) GUILayout.Label(v.changelog, _miniWrap);
-                    EditorGUILayout.EndVertical();
+                    var f = Field(null, _noteDraft, s => _noteDraft = s, true);
+                    card.Add(f);
+                    card.Add(Row("", Btn("Notu kaydet", () => Run(UpdateVersion(p, vv, _noteDraft ?? "", null)), "tp-btn tp-btn--small tp-btn--primary"),
+                        Btn("Vazgeç", () => { _noteEditVersion = null; RebuildAll(); }, "tp-btn tp-btn--small")));
                 }
+                else if (admin)
+                {
+                    var acts = Row("tp-wrap");
+                    acts.style.marginTop = 4;
+                    acts.Add(Btn(string.IsNullOrEmpty(v.note) ? "Not ekle" : "Notu düzenle", () => { _noteEditVersion = vv.version; _noteDraft = vv.note; RebuildAll(); }, "tp-link tp-small"));
+                    acts.Add(L("  ·  ", "tp-faint tp-small"));
+                    acts.Add(Btn(v.IsRecommended ? "Önerilen kaldır" : "Önerilen yap", () => Run(UpdateVersion(p, vv, null, vv.IsRecommended ? "" : "recommended")), "tp-link tp-small"));
+                    acts.Add(L("  ·  ", "tp-faint tp-small"));
+                    acts.Add(Btn(v.IsBroken ? "Bozuk değil" : "Bozuk işaretle", () => Run(UpdateVersion(p, vv, null, vv.IsBroken ? "" : "broken")), "tp-link tp-small"));
+                    if (versions.Count > 1)
+                    {
+                        acts.Add(L("  ·  ", "tp-faint tp-small"));
+                        acts.Add(Btn("Sil", () => Run(DeleteVersion(p, vv)), "tp-link tp-small"));
+                    }
+                    card.Add(acts);
+                }
+                vs.Add(card);
             }
+            return vs;
+        }
 
-            GUILayout.Space(10);
-            if (GUILayout.Button("Yeni sürüm yükle")) StartNewVersion(p);
-            if (CanEdit(p))
+        VisualElement BuildManage(TpPackage p)
+        {
+            var manage = Section("Yönet");
+            manage.Add(Row("tp-wrap", Btn("Yeni sürüm yükle", () => StartNewVersion(p), "tp-btn tp-btn--small"),
+                CanEdit(p) ? Btn("Düzenle", () => { _editing = true; RebuildAll(); }, "tp-btn tp-btn--small") : null,
+                CanEdit(p) ? Btn(p.deprecated ? "Deprecated kaldır" : "Deprecated yap", () => Run(ToggleDeprecated(p)), "tp-btn tp-btn--small") : null));
+            if (!TpCatalog.IsSuper) return manage;
+            var others = TpCatalog.Packages.Where(x => x.slug != p.slug).OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+            if (others.Count > 0)
             {
-                GUILayout.Space(4);
-                GUILayout.Label("Yönet", _h2);
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("Düzenle")) BeginEdit(p);
-                EditorGUILayout.EndHorizontal();
-                var bg2 = GUI.backgroundColor;
-                GUI.backgroundColor = new Color(1f, 0.5f, 0.45f);
-                if (GUILayout.Button("Paketi sunucudan sil")) Run(DeletePackage(p));
-                GUI.backgroundColor = bg2;
+                manage.Add(Space(10));
+                manage.Add(L("Bu paket aslında başka bir paketin aynısıysa onunla birleştir (sürümler taşınır, bu paket silinir, adı takma ad olarak kalır):", "tp-text tp-muted tp-small"));
+                var names = others.Select(x => x.DisplayName + "  (" + x.slug + ")").ToList();
+                string target = null;
+                var dd = new DropdownField(names, -1);
+                dd.style.flexGrow = 1;
+                dd.RegisterValueChangedCallback(e => { int i = names.IndexOf(e.newValue); target = i >= 0 ? others[i].slug : null; });
+                manage.Add(Row("", dd, Btn("Birleştir", () => { if (target != null) Run(Merge(p, target)); }, "tp-btn tp-btn--small")));
             }
+            manage.Add(Space(10));
+            manage.Add(Btn("Paketi sunucudan sil", () => Run(DeletePackage(p)), "tp-btn tp-btn--small tp-btn--danger"));
+            return manage;
         }
 
-        void KV(string k, string v)
-        {
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label(k, EditorStyles.miniBoldLabel, GUILayout.Width(80));
-            GUILayout.Label(v ?? "-", _miniWrap);
-            EditorGUILayout.EndHorizontal();
-        }
+        /* ---- edit (in the detail panel) ---- */
 
-        void Install(TpPackage p, TpVersion v)
-        {
-            if (p == null || v == null) return;
-            Run(InstallAsync(new List<KeyValuePair<TpPackage, TpVersion>> { new KeyValuePair<TpPackage, TpVersion>(p, v) }));
-        }
+        TpMetaUpdateRequest _edit;
+        string _editTags;
 
-        async Task InstallAsync(List<KeyValuePair<TpPackage, TpVersion>> roots)
+        static TpMetaUpdateRequest MetaOf(TpPackage p)
         {
-            _busy = true;
-            SetStatus("Hazırlanıyor…");
-            string err = await TpInstaller.InstallMany(roots);
-            if (err == "Vazgeçildi.") SetStatus("");
-            else SetStatus(err ?? "İçe aktarılıyor… (Unity derlemesi bitince tamamlanır)", err != null);
-        }
-
-        async Task DeleteVersion(TpPackage p, TpVersion v)
-        {
-            if (!EditorUtility.DisplayDialog("Twice Packages", p.DisplayName + " v" + v.version + " sunucudan silinsin mi? Geri alınamaz.", "Sil", "Vazgeç")) return;
-            _busy = true;
-            var r = await TpHub.PostJson<TpPackageResponse>("delete_version", new TpSlugVersionRequest { slug = p.slug, version = v.version });
-            if (!r.Ok) { SetStatus(r.Error, true); return; }
-            TpCatalog.Upsert(r.Data.package);
-            SetStatus("v" + v.version + " silindi.");
-        }
-
-        async Task DeletePackage(TpPackage p)
-        {
-            if (!EditorUtility.DisplayDialog("Twice Packages", p.DisplayName + " ve TÜM sürümleri sunucudan silinsin mi? Projelerdeki kurulu dosyalara dokunulmaz. Geri alınamaz.", "Sil", "Vazgeç")) return;
-            _busy = true;
-            var r = await TpHub.PostJson<TpApiBase>("delete", new TpSlugVersionRequest { slug = p.slug });
-            if (!r.Ok) { SetStatus(r.Error, true); return; }
-            TpCatalog.Remove(p.slug);
-            _selected = null;
-            SetStatus(p.DisplayName + " silindi.");
-        }
-
-        /* ------------------------------------------------------------- edit --- */
-
-        void BeginEdit(TpPackage p)
-        {
-            _edit = new TpMetaUpdateRequest
+            return new TpMetaUpdateRequest
             {
-                slug = p.slug, name = p.name, category = p.category, description = p.description,
-                publisher = p.publisher, assetStoreUrl = p.assetStoreUrl
+                slug = p.slug, name = p.name, category = p.category, subcategory = p.subcategory,
+                origin = string.IsNullOrEmpty(p.origin) ? TpOrigin.Other : p.origin,
+                deprecated = p.deprecated, deprecatedNote = p.deprecatedNote, notes = p.notes,
+                description = p.description, publisher = p.publisher, assetStoreUrl = p.assetStoreUrl, tags = p.tags
             };
-            _editTags = p.tags != null ? string.Join(", ", p.tags) : "";
-            _editing = true;
         }
 
-        void DrawEditForm(TpPackage p)
+        void BuildEdit(VisualElement b, TpPackage p)
         {
-            GUILayout.Label("Düzenle — " + p.slug, _h2);
-            _edit.name = EditorGUILayout.TextField("Ad", _edit.name);
-            _edit.category = CategoryField(_edit.category);
-            _edit.publisher = EditorGUILayout.TextField("Yayıncı", _edit.publisher);
-            GUILayout.Label("Açıklama", EditorStyles.miniBoldLabel);
-            _edit.description = EditorGUILayout.TextArea(_edit.description ?? "", _wrapArea, GUILayout.MinHeight(70));
-            _editTags = EditorGUILayout.TextField("Etiketler", _editTags);
-            _edit.assetStoreUrl = EditorGUILayout.TextField("Asset Store", _edit.assetStoreUrl);
-            GUILayout.Space(4);
-            if (GUILayout.Button("Görseli değiştir…"))
+            if (_edit == null || _edit.slug != p.slug)
+            {
+                _edit = MetaOf(p);
+                _editTags = p.tags != null ? string.Join(", ", p.tags) : "";
+            }
+            b.Add(L("Düzenle", "tp-h1"));
+            b.Add(L(p.slug, "tp-muted"));
+            b.Add(Space(10));
+            b.Add(Field("Ad", _edit.name, v => _edit.name = v));
+            b.Add(Dropdown("Kategori", TpCatalog.Categories.ToList(), _edit.category, v => { _edit.category = v; _edit.subcategory = ""; RebuildAll(); }));
+            var subs = new List<string> { "—" };
+            subs.AddRange(TpCatalog.Subcategories(_edit.category));
+            if (subs.Count > 1) b.Add(Dropdown("Alt kategori", subs, string.IsNullOrEmpty(_edit.subcategory) ? "—" : _edit.subcategory, v => _edit.subcategory = v == "—" ? "" : v));
+            b.Add(Dropdown("Köken", TpOrigin.Labels.ToList(), TpOrigin.Label(_edit.origin), v => _edit.origin = TpOrigin.All[Array.IndexOf(TpOrigin.Labels, v)]));
+            b.Add(Field("Yayıncı", _edit.publisher, v => _edit.publisher = v));
+            b.Add(Field("Açıklama", _edit.description, v => _edit.description = v, true));
+            b.Add(Field("Notlar", _edit.notes, v => _edit.notes = v, true));
+            b.Add(Field("Etiketler", _editTags, v => _editTags = v));
+            b.Add(Field("Asset Store", _edit.assetStoreUrl, v => _edit.assetStoreUrl = v));
+            b.Add(Check("Deprecated", _edit.deprecated, v => _edit.deprecated = v));
+            b.Add(Field("Deprecated notu", _edit.deprecatedNote, v => _edit.deprecatedNote = v));
+            b.Add(Space(8));
+            b.Add(Btn("Görseli değiştir…", () =>
             {
                 string f = EditorUtility.OpenFilePanel("Önizleme görseli", "", "png,jpg,jpeg");
                 if (!string.IsNullOrEmpty(f)) Run(ChangeImage(p, f));
-            }
-            GUILayout.Space(6);
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Vazgeç")) _editing = false;
-            GUI.enabled = !_busy && !string.IsNullOrEmpty(_edit.name);
-            if (GUILayout.Button("Kaydet")) Run(SaveEdit());
-            GUI.enabled = true;
-            EditorGUILayout.EndHorizontal();
+            }, "tp-btn tp-btn--small"));
+            b.Add(Space(12));
+            var save = Btn("Kaydet", () => Run(SaveEdit()), "tp-btn tp-btn--primary");
+            save.SetEnabled(!_busy);
+            b.Add(Row("", save, Btn("Vazgeç", () => { _editing = false; _edit = null; RebuildAll(); })));
         }
-
-        GUIStyle _wrapAreaStyle;
-        GUIStyle _wrapArea { get { return _wrapAreaStyle ?? (_wrapAreaStyle = new GUIStyle(EditorStyles.textArea) { wordWrap = true }); } }
 
         async Task SaveEdit()
         {
@@ -741,7 +797,47 @@ namespace TwiceSDK.PackageManager
             if (!r.Ok) { SetStatus(r.Error, true); return; }
             TpCatalog.Upsert(r.Data.package);
             _editing = false;
+            _edit = null;
             SetStatus("Kaydedildi.");
+        }
+
+        async Task UpdateVersion(TpPackage p, TpVersion v, string note, string status)
+        {
+            _busy = true;
+            var req = new TpVersionUpdateRequest { slug = p.slug, version = v.version, note = note ?? v.note ?? "", status = status ?? v.status ?? "" };
+            var r = await TpHub.PostJson<TpPackageResponse>("version", req);
+            if (!r.Ok) { SetStatus(r.Error, true); return; }
+            TpCatalog.Upsert(r.Data.package);
+            _noteEditVersion = null;
+            _pickedVersion = null;
+            SetStatus("v" + v.version + " güncellendi.");
+        }
+
+        async Task ToggleDeprecated(TpPackage p)
+        {
+            if (!p.deprecated && !EditorUtility.DisplayDialog("Twice Package Hub", p.DisplayName + " deprecated işaretlensin mi? Silinmez; listede karartılır ve toplu yüklemede tekrar önerilmez.", "Deprecated yap", "Vazgeç")) return;
+            _busy = true;
+            var req = MetaOf(p);
+            req.deprecated = !p.deprecated;
+            var r = await TpHub.PostJson<TpPackageResponse>("update", req);
+            if (!r.Ok) { SetStatus(r.Error, true); return; }
+            TpCatalog.Upsert(r.Data.package);
+            SetStatus(p.DisplayName + (req.deprecated ? " deprecated işaretlendi." : " artık deprecated değil."));
+        }
+
+        async Task Merge(TpPackage p, string into)
+        {
+            var target = TpCatalog.Find(into);
+            if (target == null) return;
+            if (!EditorUtility.DisplayDialog("Twice Package Hub — birleştir",
+                    p.DisplayName + " → " + target.DisplayName + "\n\n" + p.DisplayName + " sürümleri " + target.DisplayName + " altına taşınır (aynı sürüm ikisinde de varsa hedefinki kalır), bu ad hedefin takma adı olur ve " + p.slug + " silinir.", "Birleştir", "Vazgeç")) return;
+            _busy = true;
+            var r = await TpHub.PostJson<TpPackageResponse>("merge", new TpMergeRequest { from = p.slug, into = into });
+            if (!r.Ok) { SetStatus(r.Error, true); return; }
+            TpCatalog.Remove(p.slug);
+            TpCatalog.Upsert(r.Data.package);
+            _selected = into;
+            SetStatus("Birleştirildi: " + (r.Data.moved != null ? r.Data.moved.Length : 0) + " sürüm taşındı" + (r.Data.skipped != null && r.Data.skipped.Length > 0 ? ", " + r.Data.skipped.Length + " aynı sürüm atlandı" : "") + ".");
         }
 
         async Task ChangeImage(TpPackage p, string file)
@@ -754,418 +850,45 @@ namespace TwiceSDK.PackageManager
             SetStatus("Görsel güncellendi.");
         }
 
-        string CategoryField(string current)
+        async Task DeleteVersion(TpPackage p, TpVersion v)
         {
-            var cats = TpCatalog.Packages.Where(x => !string.IsNullOrEmpty(x.category)).Select(x => x.category)
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
-            EditorGUILayout.BeginHorizontal();
-            current = EditorGUILayout.TextField("Kategori", current ?? "");
-            if (cats.Count > 0)
-            {
-                int pick = EditorGUILayout.Popup(-1, cats.ToArray(), GUILayout.Width(22));
-                if (pick >= 0) { current = cats[pick]; GUI.FocusControl(null); }
-            }
-            EditorGUILayout.EndHorizontal();
-            return current;
+            if (!EditorUtility.DisplayDialog("Twice Package Hub", p.DisplayName + " v" + v.version + " sunucudan silinsin mi? Geri alınamaz.", "Sil", "Vazgeç")) return;
+            _busy = true;
+            var r = await TpHub.PostJson<TpPackageResponse>("delete_version", new TpSlugVersionRequest { slug = p.slug, version = v.version });
+            if (!r.Ok) { SetStatus(r.Error, true); return; }
+            TpCatalog.Upsert(r.Data.package);
+            _pickedVersion = null;
+            SetStatus("v" + v.version + " silindi.");
         }
 
-        /* ========================================================= installed === */
-
-        void DrawInstalled()
+        async Task DeletePackage(TpPackage p)
         {
-            var state = TpInstaller.State.installed;
-            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-            GUILayout.Label("Bu projede " + state.Count + " Twice paketi · kayıt: " + TpInstaller.StatePath, EditorStyles.miniLabel);
-            GUILayout.FlexibleSpace();
-            var updates = TpCatalog.Packages.Where(p => TpInstaller.HasUpdate(p)).ToList();
-            GUI.enabled = updates.Count > 0 && !TpInstaller.Busy;
-            if (GUILayout.Button("Hepsini güncelle (" + updates.Count + ")", EditorStyles.toolbarButton))
-                Run(InstallAsync(updates.Select(p => new KeyValuePair<TpPackage, TpVersion>(p, p.Latest)).ToList()));
-            GUI.enabled = true;
-            EditorGUILayout.EndHorizontal();
-
-            _tabScroll = EditorGUILayout.BeginScrollView(_tabScroll);
-            if (state.Count == 0)
-            {
-                GUILayout.Space(40);
-                GUILayout.Label("Bu projeye henüz Twice Packages üzerinden paket kurulmadı.", _center);
-            }
-            foreach (var i in state.ToList())
-            {
-                var p = TpCatalog.Find(i.slug);
-                EditorGUILayout.BeginHorizontal(_card, GUILayout.Height(46));
-                if (p != null)
-                {
-                    var img = GUILayoutUtility.GetRect(56, 34, GUILayout.Width(56), GUILayout.Height(34));
-                    DrawImage(img, p, ScaleMode.ScaleAndCrop);
-                }
-                EditorGUILayout.BeginVertical();
-                GUILayout.Label((p != null ? p.DisplayName : i.slug) + "   v" + i.version, EditorStyles.boldLabel);
-                GUILayout.Label(TpFormat.Date(i.installedAt) + (string.IsNullOrEmpty(i.installedBy) ? "" : " · " + i.installedBy) + " · " + i.guids.Count + " varlık", _mini);
-                EditorGUILayout.EndVertical();
-                GUILayout.FlexibleSpace();
-                if (p == null) Badge("katalogda yok", Grey);
-                else if (TpInstaller.HasUpdate(p)) Badge("v" + p.latest + " var", Orange);
-                else Badge("güncel", Green);
-                GUI.enabled = !TpInstaller.Busy;
-                if (p != null && TpInstaller.HasUpdate(p) && GUILayout.Button("Güncelle", GUILayout.Width(74))) Install(p, p.Latest);
-                if (p != null && GUILayout.Button("Detay", GUILayout.Width(52))) { _tab = Tab.Browse; _selected = p.slug; _cat = CatAll; }
-                if (GUILayout.Button("Kaldır", GUILayout.Width(56)))
-                {
-                    string err = TpInstaller.Uninstall(i.slug);
-                    SetStatus(err ?? (i.slug + " kaldırıldı."), err != null && err != "Vazgeçildi.");
-                }
-                if (GUILayout.Button(new GUIContent("Unut", "Kaydı siler, dosyalara dokunmaz"), GUILayout.Width(44)))
-                {
-                    if (EditorUtility.DisplayDialog("Twice Packages", i.slug + " kaydı silinsin mi? Dosyalar projede kalır.", "Unut", "Vazgeç")) TpInstaller.Forget(i.slug);
-                }
-                GUI.enabled = true;
-                EditorGUILayout.EndHorizontal();
-            }
-            EditorGUILayout.EndScrollView();
+            if (!EditorUtility.DisplayDialog("Twice Package Hub", p.DisplayName + " ve TÜM sürümleri sunucudan silinsin mi? Projelerdeki kurulu dosyalara dokunulmaz. Geri alınamaz.\n\nSadece kullanılmasın istiyorsan Deprecated yap: silinen paket bir sonraki toplu yüklemede yeniden önerilir.", "Sil", "Vazgeç")) return;
+            _busy = true;
+            var r = await TpHub.PostJson<TpApiBase>("delete", new TpSlugVersionRequest { slug = p.slug });
+            if (!r.Ok) { SetStatus(r.Error, true); return; }
+            TpCatalog.Remove(p.slug);
+            _selected = null;
+            SetStatus(p.DisplayName + " silindi.");
         }
 
-        /* ============================================================ upload === */
+        /* --------------------------------------------------------------- install --- */
 
-        void StartNewVersion(TpPackage p)
+        void Install(TpPackage p, TpVersion v)
         {
-            _tab = Tab.Upload;
-            _upNew = false;
-            var editable = EditablePackages();
-            _upTarget = Mathf.Max(0, editable.FindIndex(x => x.slug == p.slug));
-            PrefillFrom(p);
+            if (p == null || v == null) return;
+            if (p.deprecated && !EditorUtility.DisplayDialog("Twice Package Hub", p.DisplayName + " deprecated" + (string.IsNullOrEmpty(p.deprecatedNote) ? "." : ": " + p.deprecatedNote) + "\n\nYine de içe aktarılsın mı?", "İçe aktar", "Vazgeç")) return;
+            if (v.IsBroken && !EditorUtility.DisplayDialog("Twice Package Hub", p.DisplayName + " v" + v.version + " bozuk işaretli" + (string.IsNullOrEmpty(v.note) ? "." : ": " + v.note) + "\n\nYine de içe aktarılsın mı?", "İçe aktar", "Vazgeç")) return;
+            Run(InstallAsync(new List<KeyValuePair<TpPackage, TpVersion>> { new KeyValuePair<TpPackage, TpVersion>(p, v) }));
         }
 
-        /// <summary>Any package can get a new version (server rule); meta of others' packages is left untouched.</summary>
-        List<TpPackage> EditablePackages()
-        {
-            return TpCatalog.Packages.OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-
-        void PrefillFrom(TpPackage p)
-        {
-            var l = p.Latest;
-            _upName = p.name;
-            _upSlug = p.slug;
-            _upVersion = TpSemVer.BumpPatch(p.latest);
-            _upCategory = p.category;
-            _upPublisher = p.publisher;
-            _upDesc = p.description;
-            _upTags = p.tags != null ? string.Join(", ", p.tags) : "";
-            _upStoreUrl = p.assetStoreUrl;
-            _upDeps = l != null && l.dependencies != null ? string.Join(", ", l.dependencies) : "";
-            _upUpm = l != null && l.upmDependencies != null ? string.Join(", ", l.upmDependencies) : "";
-            _upChangelog = "";
-            _upUnity = UnityMajorMinor();
-        }
-
-        void DrawUpload()
-        {
-            _tabScroll = EditorGUILayout.BeginScrollView(_tabScroll);
-            EditorGUILayout.BeginVertical(GUILayout.MaxWidth(720));
-            GUILayout.Space(6);
-
-            int mode = GUILayout.Toolbar(_upNew ? 0 : 1, new[] { "Yeni paket", "Mevcut pakete yeni sürüm" });
-            bool newMode = mode == 0;
-            var editable = EditablePackages();
-            if (newMode != _upNew)
-            {
-                _upNew = newMode;
-                if (!_upNew && editable.Count > 0) PrefillFrom(editable[Mathf.Clamp(_upTarget, 0, editable.Count - 1)]);
-                if (_upNew) { _upName = ""; _upSlug = ""; _upVersion = "1.0.0"; _upSlugTouched = false; _upChangelog = ""; }
-            }
-            GUILayout.Space(8);
-
-            TpPackage target = null;
-            if (!_upNew)
-            {
-                if (editable.Count == 0)
-                {
-                    EditorGUILayout.HelpBox("Katalogda henüz paket yok.", MessageType.Info);
-                    EditorGUILayout.EndVertical();
-                    EditorGUILayout.EndScrollView();
-                    return;
-                }
-                int t = EditorGUILayout.Popup("Paket", Mathf.Clamp(_upTarget, 0, editable.Count - 1), editable.Select(x => x.DisplayName + "  (v" + x.latest + ")").ToArray());
-                if (t != _upTarget) { _upTarget = t; PrefillFrom(editable[t]); }
-                target = editable[Mathf.Clamp(_upTarget, 0, editable.Count - 1)];
-            }
-
-            // ---- source
-            GUILayout.Label("Kaynak", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            _upFromFile = GUILayout.Toolbar(_upFromFile ? 1 : 0, new[] { "Projeden dışa aktar", ".unitypackage dosyası" }) == 1;
-            if (_upFromFile)
-            {
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.TextField(string.IsNullOrEmpty(_upFile) ? "(seçilmedi)" : _upFile);
-                if (GUILayout.Button("Seç…", GUILayout.Width(60)))
-                {
-                    string f = EditorUtility.OpenFilePanel("Unity paketi", "", "unitypackage");
-                    if (!string.IsNullOrEmpty(f)) _upFile = f;
-                }
-                EditorGUILayout.EndHorizontal();
-                if (File.Exists(_upFile)) GUILayout.Label(TpFormat.Size(new FileInfo(_upFile).Length), EditorStyles.miniLabel);
-            }
-            else
-            {
-                DrawExportPaths();
-            }
-            EditorGUILayout.EndVertical();
-
-            // ---- metadata
-            GUILayout.Space(6);
-            GUILayout.Label("Bilgiler", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            if (_upNew)
-            {
-                string n = EditorGUILayout.TextField("Ad *", _upName);
-                if (n != _upName) { _upName = n; if (!_upSlugTouched) _upSlug = TpFormat.Slugify(n); }
-                string s = EditorGUILayout.TextField(new GUIContent("Kimlik (slug) *", "Kalıcı kimlik; bağımlılıklarda kullanılır, sonra değişmez."), _upSlug);
-                if (s != _upSlug) { _upSlug = s.ToLowerInvariant(); _upSlugTouched = true; }
-                if (_upSlug.Length > 0 && TpCatalog.Find(_upSlug) != null)
-                    EditorGUILayout.HelpBox("Bu kimlikte bir paket zaten var. Yeni sürüm için üstten 'Mevcut pakete yeni sürüm'ü seç.", MessageType.Warning);
-            }
-            EditorGUILayout.BeginHorizontal();
-            _upVersion = EditorGUILayout.TextField("Sürüm *", _upVersion);
-            if (target != null) GUILayout.Label("şu an v" + target.latest, EditorStyles.miniLabel, GUILayout.Width(90));
-            EditorGUILayout.EndHorizontal();
-            if (!TpSemVer.IsValid(_upVersion)) EditorGUILayout.HelpBox("Sürüm 1.0.0 biçiminde olmalı.", MessageType.Warning);
-            else if (target != null && TpSemVer.Compare(_upVersion, target.latest) <= 0) EditorGUILayout.HelpBox("Bu sürüm mevcut en yeniden (" + target.latest + ") büyük değil; yine de yüklenebilir ama 'en yeni' sayılmaz.", MessageType.None);
-            _upCategory = CategoryField(_upCategory);
-            _upPublisher = EditorGUILayout.TextField(new GUIContent("Yayıncı", "Asset'in asıl yapımcısı (ör. Asset Store yayıncısı)"), _upPublisher);
-            GUILayout.Label("Açıklama", EditorStyles.miniBoldLabel);
-            _upDesc = EditorGUILayout.TextArea(_upDesc ?? "", _wrapArea, GUILayout.MinHeight(54));
-            _upTags = EditorGUILayout.TextField("Etiketler (virgülle)", _upTags);
-            _upStoreUrl = EditorGUILayout.TextField("Asset Store URL", _upStoreUrl);
-            _upUnity = EditorGUILayout.TextField(new GUIContent("En düşük Unity", "Örn. 2021.3 — daha eski Unity'de kurarken uyarı çıkar"), _upUnity);
-            GUILayout.Label("Değişiklik notu (bu sürüm)", EditorStyles.miniBoldLabel);
-            _upChangelog = EditorGUILayout.TextArea(_upChangelog ?? "", _wrapArea, GUILayout.MinHeight(40));
-            EditorGUILayout.EndVertical();
-
-            // ---- dependencies
-            GUILayout.Space(6);
-            GUILayout.Label("Bağımlılıklar", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            _upDeps = EditorGUILayout.TextField(new GUIContent("Twice paketleri", "slug ya da slug@1.2.0 (en az), virgülle"), _upDeps);
-            var catSlugs = TpCatalog.Packages.Where(x => x.slug != _upSlug).Select(x => x.slug).OrderBy(x => x).ToArray();
-            if (catSlugs.Length > 0)
-            {
-                int add = EditorGUILayout.Popup("  + ekle", -1, catSlugs);
-                if (add >= 0) { _upDeps = string.Join(", ", TpFormat.SplitList(_upDeps).Concat(new[] { catSlugs[add] }).Distinct()); GUI.FocusControl(null); }
-            }
-            _upUpm = EditorGUILayout.TextField(new GUIContent("UPM paketleri", "com.unity.textmeshpro ya da com.unity.textmeshpro@3.0.6, virgülle"), _upUpm);
-            EditorGUILayout.EndVertical();
-
-            // ---- image
-            GUILayout.Space(6);
-            GUILayout.Label("Önizleme görseli", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.BeginHorizontal();
-            var pr = GUILayoutUtility.GetRect(160, 90, GUILayout.Width(160), GUILayout.Height(90));
-            if (_upImagePreview != null) GUI.DrawTexture(pr, _upImagePreview, ScaleMode.ScaleToFit);
-            else if (target != null) DrawImage(pr, target, ScaleMode.ScaleToFit);
-            else EditorGUI.DrawRect(pr, new Color(0.2f, 0.2f, 0.2f));
-            EditorGUILayout.BeginVertical();
-            if (GUILayout.Button("Görsel seç…", GUILayout.Width(110)))
-            {
-                string f = EditorUtility.OpenFilePanel("Önizleme görseli", "", "png,jpg,jpeg");
-                if (!string.IsNullOrEmpty(f))
-                {
-                    _upImage = f;
-                    if (_upImagePreview != null) DestroyImmediate(_upImagePreview);
-                    _upImagePreview = new Texture2D(2, 2) { hideFlags = HideFlags.HideAndDontSave };
-                    _upImagePreview.LoadImage(File.ReadAllBytes(f));
-                }
-            }
-            if (!string.IsNullOrEmpty(_upImage) && GUILayout.Button("Kaldır", GUILayout.Width(110))) { _upImage = ""; _upImagePreview = null; }
-            GUILayout.Label(target != null ? "Boş bırakırsan mevcut görsel kalır." : "İsteğe bağlı. 640 px'e küçültülür.", _miniWrap);
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-
-            // ---- submit
-            GUILayout.Space(10);
-            string problem = UploadProblem();
-            if (problem != null) EditorGUILayout.HelpBox(problem, MessageType.None);
-            GUI.enabled = problem == null && !TpUploader.Running && !_busy;
-            var bg = GUI.backgroundColor;
-            GUI.backgroundColor = new Color(0.45f, 0.75f, 1f);
-            if (GUILayout.Button(_upNew ? "Paketi yükle" : "v" + _upVersion + " sürümünü yükle", GUILayout.Height(32))) Run(DoUpload());
-            GUI.backgroundColor = bg;
-            GUI.enabled = true;
-            GUILayout.Space(20);
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndScrollView();
-        }
-
-        void DrawExportPaths()
-        {
-            GUILayout.Label("Dışa aktarılacak klasör/dosyalar (Project penceresinden sürükle ya da seçip ekle):", _miniWrap);
-            var drop = GUILayoutUtility.GetRect(0, 38, GUILayout.ExpandWidth(true));
-            GUI.Box(drop, "Buraya sürükle", _center);
-            var ev = Event.current;
-            if ((ev.type == EventType.DragUpdated || ev.type == EventType.DragPerform) && drop.Contains(ev.mousePosition))
-            {
-                DragAndDrop.visualMode = DragAndDropVisualMode.Copy;
-                if (ev.type == EventType.DragPerform)
-                {
-                    DragAndDrop.AcceptDrag();
-                    foreach (var o in DragAndDrop.objectReferences) AddExportPath(AssetDatabase.GetAssetPath(o));
-                }
-                ev.Use();
-            }
-            if (GUILayout.Button("Seçili olanları ekle", GUILayout.Width(150)))
-                foreach (var o in Selection.objects) AddExportPath(AssetDatabase.GetAssetPath(o));
-            for (int i = 0; i < _upPaths.Count; i++)
-            {
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.Label(_upPaths[i], EditorStyles.miniLabel);
-                if (GUILayout.Button("×", EditorStyles.miniButton, GUILayout.Width(20))) { _upPaths.RemoveAt(i); i--; }
-                EditorGUILayout.EndHorizontal();
-            }
-            _upIncludeDeps = EditorGUILayout.ToggleLeft(new GUIContent("Bağımlı varlıkları da dahil et", "Seçilenlerin klasör dışındaki referansları (materyal, shader, script…) da pakete girer"), _upIncludeDeps);
-        }
-
-        void AddExportPath(string p)
-        {
-            if (string.IsNullOrEmpty(p) || !p.StartsWith("Assets", StringComparison.Ordinal) || _upPaths.Contains(p)) return;
-            _upPaths.Add(p);
-            if (_upNew && string.IsNullOrEmpty(_upName)) { _upName = Path.GetFileNameWithoutExtension(p); if (!_upSlugTouched) _upSlug = TpFormat.Slugify(_upName); }
-        }
-
-        string UploadProblem()
-        {
-            if (_upFromFile ? !File.Exists(_upFile) : _upPaths.Count == 0) return "Kaynak seç: proje klasörü ya da .unitypackage dosyası.";
-            if (_upNew && string.IsNullOrEmpty(_upName)) return "Ad gerekli.";
-            if (_upNew && !System.Text.RegularExpressions.Regex.IsMatch(_upSlug ?? "", "^[a-z0-9][a-z0-9\\-]{1,62}$")) return "Kimlik: küçük harf, rakam ve tire (2-63).";
-            if (_upNew && TpCatalog.Find(_upSlug) != null) return "Bu kimlik dolu.";
-            if (!TpSemVer.IsValid(_upVersion)) return "Sürüm geçersiz.";
-            return null;
-        }
-
-        async Task DoUpload()
+        async Task InstallAsync(List<KeyValuePair<TpPackage, TpVersion>> roots)
         {
             _busy = true;
-            var editable = EditablePackages();
-            string slug = _upNew ? _upSlug : editable[Mathf.Clamp(_upTarget, 0, editable.Count - 1)].slug;
-            SetStatus("Yükleniyor: " + slug + " " + _upVersion);
-            var req = new TpUploader.Request
-            {
-                IsNewPackage = _upNew,
-                Slug = slug,
-                Name = _upName,
-                Version = _upVersion.Trim(),
-                Category = _upCategory,
-                Description = _upDesc,
-                Publisher = _upPublisher,
-                Tags = TpFormat.SplitList(_upTags),
-                AssetStoreUrl = _upStoreUrl,
-                Unity = _upUnity,
-                Changelog = _upChangelog,
-                Dependencies = TpFormat.SplitList(_upDeps),
-                UpmDependencies = TpFormat.SplitList(_upUpm),
-                SourceFile = _upFromFile ? _upFile : null,
-                ExportPaths = _upFromFile ? null : new List<string>(_upPaths),
-                IncludeDependencies = _upIncludeDeps,
-                ImagePath = _upImage
-            };
-            string err = await TpUploader.Upload(req);
-            if (err != null) { SetStatus(err, true); EditorUtility.DisplayDialog("Twice Packages — yükleme", err, "Tamam"); return; }
-            SetStatus(slug + " v" + req.Version + " yüklendi.");
-            _upImage = "";
-            _upImagePreview = null;
-            _upChangelog = "";
-            _selected = slug;
-            _tab = Tab.Browse;
-            _cat = CatAll;
-        }
-
-        /* ========================================================== settings === */
-
-        void DrawSettings()
-        {
-            _tabScroll = EditorGUILayout.BeginScrollView(_tabScroll);
-            EditorGUILayout.BeginVertical(GUILayout.MaxWidth(680));
-            GUILayout.Space(8);
-            GUILayout.Label("Bağlantı", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            string who = !string.IsNullOrEmpty(_me) ? _me : !string.IsNullOrEmpty(TpSettings.ConnectedAs) ? "Bağlı: " + TpSettings.ConnectedAs : "Bağlı";
-            GUILayout.Label(who + (TpSettings.UsingPlayTwiceToken ? " (bu projenin PlayTwice token'ı)" : " · " + TpSettings.MachineLabel), EditorStyles.miniBoldLabel);
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Bağlantıyı test et", GUILayout.Width(130))) Run(TestConnection());
-            GUI.enabled = !TpSettings.UsingPlayTwiceToken;
-            if (GUILayout.Button("Bağlantıyı kes", GUILayout.Width(110))) Disconnect();
-            GUI.enabled = true;
-            if (GUILayout.Button("Bağlı bilgisayarlarım ↗", GUILayout.Width(160))) Application.OpenURL(TpSettings.HubBase + "/packages.php");
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-
-            GUILayout.Space(8);
-            GUILayout.Label("İçe aktarma", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            TpSettings.InteractiveImport = EditorGUILayout.ToggleLeft(new GUIContent("Unity'nin içe aktarma penceresini göster", "Dosya dosya seçmek için. Kapalıyken paketin tamamı doğrudan içe aktarılır."), TpSettings.InteractiveImport);
-            TpSettings.CleanUpdate = EditorGUILayout.ToggleLeft(new GUIContent("Güncellemede eski sürümden kalan dosyaları silmeyi öner", "Yeni sürümde olmayan dosyalar listelenir, onaylarsan silinir."), TpSettings.CleanUpdate);
-            TpSettings.Verbose = EditorGUILayout.ToggleLeft("Ayrıntılı log", TpSettings.Verbose);
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label("Kurulum kaydı: " + TpInstaller.StatePath + " (projeyle birlikte commit'le)", _miniWrap);
-            if (GUILayout.Button("Yeniden oku", GUILayout.Width(90))) TpInstaller.ReloadState();
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-
-            GUILayout.Space(8);
-            GUILayout.Label("Asset Store", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.BeginHorizontal();
-            string asc = EditorGUILayout.TextField(new GUIContent("İndirme klasörü", "Unity'nin My Assets indirmelerini koyduğu yer (Preferences ▸ Package Manager'da değiştirildiyse burayı da değiştir)"), TpLocalScan.AssetStoreCache);
-            if (asc != TpLocalScan.AssetStoreCache) TpSettings.SetString("AssetStoreCache", asc == TpLocalScan.DefaultAssetStoreCache ? "" : asc);
-            if (GUILayout.Button("…", GUILayout.Width(24)))
-            {
-                string d = EditorUtility.OpenFolderPanel("Asset Store indirme klasörü", TpLocalScan.AssetStoreCache, "");
-                if (!string.IsNullOrEmpty(d)) TpSettings.SetString("AssetStoreCache", d);
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-
-            GUILayout.Space(8);
-            GUILayout.Label("Önbellek", _h2);
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label("İndirilen paketler projeler arasında paylaşılır; aynı sürüm ikinci kez indirilmez.", _miniWrap);
-            EditorGUILayout.BeginHorizontal();
-            string custom = EditorGUILayout.TextField("Klasör", string.IsNullOrEmpty(TpSettings.CustomCacheDir) ? TpSettings.DefaultCacheDir : TpSettings.CustomCacheDir);
-            if (custom != TpSettings.CacheDir) TpSettings.CustomCacheDir = custom == TpSettings.DefaultCacheDir ? "" : custom;
-            if (GUILayout.Button("…", GUILayout.Width(24)))
-            {
-                string d = EditorUtility.OpenFolderPanel("Önbellek klasörü", TpSettings.CacheDir, "");
-                if (!string.IsNullOrEmpty(d)) TpSettings.CustomCacheDir = d;
-            }
-            if (GUILayout.Button("Aç", GUILayout.Width(36))) { Directory.CreateDirectory(TpSettings.CacheDir); EditorUtility.RevealInFinder(TpSettings.CacheDir); }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Boyutu hesapla", GUILayout.Width(120))) SetStatus("Önbellek: " + TpFormat.Size(TpCatalog.CacheSize()));
-            if (GUILayout.Button("Önbelleği temizle", GUILayout.Width(130)) &&
-                EditorUtility.DisplayDialog("Twice Packages", "İndirilmiş tüm paketler ve görseller silinsin mi? (Projelere dokunulmaz.)", "Temizle", "Vazgeç"))
-            {
-                TpCatalog.ClearFileCache();
-                SetStatus("Önbellek temizlendi.");
-            }
-            EditorGUILayout.EndHorizontal();
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndVertical();
-            EditorGUILayout.EndScrollView();
-        }
-
-        async Task TestConnection()
-        {
-            _busy = true;
-            SetStatus("Bağlanılıyor…");
-            var r = await TpHub.Get<TpMeResponse>("me");
-            if (!r.Ok) { _me = ""; SetStatus(r.Error, true); return; }
-            TpSettings.ConnectedAs = r.Data.user + (r.Data.super ? " (yönetici)" : "");
-            _me = "Bağlı: " + TpSettings.ConnectedAs;
-            SetStatus(_me);
-            await RefreshCatalog(false);
-            if (_tab == Tab.Settings && TpCatalog.Packages.Count > 0) _tab = Tab.Browse;
+            SetStatus("Hazırlanıyor…");
+            string err = await TpInstaller.InstallMany(roots);
+            if (err == "Vazgeçildi.") SetStatus("");
+            else SetStatus(err ?? "İçe aktarılıyor… (Unity derlemesi bitince tamamlanır)", err != null);
         }
     }
 }

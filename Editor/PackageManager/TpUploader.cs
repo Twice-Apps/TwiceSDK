@@ -22,6 +22,11 @@ namespace TwiceSDK.PackageManager
             public string Name;
             public string Version;
             public string Category;
+            public string Subcategory;
+            public string Origin = TpOrigin.Other;
+            public string StoreId;
+            public bool Deprecated;
+            public bool Overwrite;              // replace an existing version (admin; asked first)
             public string Description;
             public string Publisher;
             public string[] Tags = new string[0];
@@ -32,13 +37,25 @@ namespace TwiceSDK.PackageManager
             public string[] UpmDependencies = new string[0];
 
             public string SourceFile;           // an existing .unitypackage, or…
-            public List<string> ExportPaths;    // …project paths exported now
+            public List<string> ExportPaths;    // …project paths exported now, or…
+            public string SourceFolder;         // …a plain asset folder (packed by TpPacker)
             public bool IncludeDependencies;
+
+            /// <summary>
+            /// Before uploading, ask the hub (rules + Claude) whether this asset already exists
+            /// under another name and fill name / category / description the user left empty.
+            /// Bulk upload has already identified its rows and turns this off.
+            /// </summary>
+            public bool AutoIdentify = true;
+            public TpIdentifyResult Identified;  // what the check returned (for the UI)
 
             public string ImagePath;            // optional png/jpg
         }
 
         public static bool Running { get; private set; }
+
+        /// <summary>Prefix of the error returned when the exact version is already on the hub.</summary>
+        public const string VersionExists = "version_exists:";
 
         /// <summary>Returns null on success, else an error message.</summary>
         public static async Task<string> Upload(Request r)
@@ -62,6 +79,15 @@ namespace TwiceSDK.PackageManager
                     if (!File.Exists(exported)) return "Dışa aktarma başarısız.";
                     file = exported;
                 }
+                if (!string.IsNullOrEmpty(r.SourceFolder))
+                {
+                    EditorUtility.DisplayProgressBar("Twice Packages", "Klasör paketleniyor…", 0f);
+                    Directory.CreateDirectory("Temp/TwicePackages");
+                    exported = Path.GetFullPath("Temp/TwicePackages/" + TpFormat.Slugify(r.Name ?? r.Slug) + "-" + r.Version + ".unitypackage");
+                    var pk = await Task.Run(() => TpPacker.Pack(r.SourceFolder, r.Name, string.IsNullOrEmpty(r.Slug) ? TpFormat.Slugify(r.Name) : r.Slug, exported));
+                    TpLog.Info("Klasör paketlendi: " + pk.Count + " varlık, " + pk.GeneratedMetas + " .meta üretildi, kök " + pk.RootPath);
+                    file = exported;
+                }
                 if (string.IsNullOrEmpty(file) || !File.Exists(file)) return ".unitypackage dosyası yok.";
 
                 long size = new FileInfo(file).Length;
@@ -70,6 +96,17 @@ namespace TwiceSDK.PackageManager
                 string[] namespaces;
                 try { namespaces = (await Task.Run(() => TpUnityPackageReader.Namespaces(file))).ToArray(); }
                 catch (Exception) { namespaces = new string[0]; }
+
+                if (r.AutoIdentify)
+                {
+                    EditorUtility.DisplayProgressBar("Twice Packages", "Kütüphanede aynısı var mı, kategori… (AI)", 0.02f);
+                    var id = await TpIdentify.Run(new List<TpIdentifyItem> { new TpIdentifyItem {
+                        title = string.IsNullOrEmpty(r.Name) ? r.Slug : r.Name, version = r.Version, publisher = r.Publisher,
+                        category = r.Category, storeId = r.StoreId, filename = Path.GetFileName(r.SourceFile ?? r.SourceFolder ?? ""),
+                        origin = r.Origin, namespaces = namespaces } }, true);
+                    if (id.Value == null && id.Key.Count == 1) ApplyIdentity(r, id.Key[0]);
+                    else if (id.Value != null) TpLog.Warn("Otomatik kontrol yapılamadı, kurallarla devam: " + id.Value);
+                }
 
                 var begin = await TpHub.PostJson<TpUploadBeginResponse>("upload_begin", new TpUploadBeginRequest
                 {
@@ -87,9 +124,19 @@ namespace TwiceSDK.PackageManager
                     description = r.Description,
                     publisher = r.Publisher,
                     tags = r.Tags,
-                    assetStoreUrl = r.AssetStoreUrl
+                    assetStoreUrl = r.AssetStoreUrl,
+                    subcategory = r.Subcategory,
+                    origin = r.Origin,
+                    storeId = r.StoreId,
+                    deprecated = r.Deprecated,
+                    overwrite = r.Overwrite
                 });
-                if (!begin.Ok) return begin.Error;
+                if (!begin.Ok)
+                {
+                    // The caller asks "overwrite?" and calls again with Overwrite = true.
+                    if (begin.Data != null && begin.Data.code == "version_exists") return VersionExists + begin.Error;
+                    return begin.Error;
+                }
                 var b = begin.Data;
                 string uid = b.uploadId;
                 long chunk = b.chunkSize > 0 ? b.chunkSize : 8L * 1024 * 1024;
@@ -159,6 +206,22 @@ namespace TwiceSDK.PackageManager
                 EditorUtility.ClearProgressBar();
                 if (exported != null) { try { File.Delete(exported); } catch (Exception) { } }
             }
+        }
+
+        /// <summary>Match wins over the typed name (new version of the existing package); AI fills only what is empty.</summary>
+        public static void ApplyIdentity(Request r, TpIdentifyResult id)
+        {
+            if (id == null) return;
+            r.Identified = id;
+            if (id.MatchSlug != null) { r.Slug = id.MatchSlug; r.IsNewPackage = false; }
+            if (string.IsNullOrEmpty(r.Name) || (r.IsNewPackage && id.source == "ai")) r.Name = string.IsNullOrEmpty(id.name) ? r.Name : id.name;
+            if (string.IsNullOrEmpty(r.Category) || r.Category == "Other") r.Category = id.category;
+            if (string.IsNullOrEmpty(r.Subcategory)) r.Subcategory = id.subcategory;
+            if (string.IsNullOrEmpty(r.Description)) r.Description = id.description;
+            if (string.IsNullOrEmpty(r.Publisher)) r.Publisher = id.publisher;
+            if ((r.Tags == null || r.Tags.Length == 0) && id.tags != null) r.Tags = id.tags;
+            if ((string.IsNullOrEmpty(r.Origin) || r.Origin == TpOrigin.Other) && !string.IsNullOrEmpty(id.origin)) r.Origin = id.origin;
+            if (string.IsNullOrEmpty(r.Slug) || (r.IsNewPackage && id.MatchSlug == null)) r.Slug = TpFormat.Slugify(r.Name);
         }
 
         static async Task Abort(string uid)

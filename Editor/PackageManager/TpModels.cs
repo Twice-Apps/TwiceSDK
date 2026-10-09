@@ -11,6 +11,7 @@ namespace TwiceSDK.PackageManager
     {
         public bool ok;
         public string error;
+        public string code;     // machine-readable error, e.g. "version_exists"
     }
 
     [Serializable]
@@ -27,6 +28,26 @@ namespace TwiceSDK.PackageManager
         public string uploadedBy;
         public string uploadedAt;
         public int downloads;
+        public string note;         // e.g. "calisan surum bu"
+        public string status;       // "" | recommended | broken
+
+        public bool IsBroken { get { return status == "broken"; } }
+        public bool IsRecommended { get { return status == "recommended"; } }
+    }
+
+    [Serializable]
+    public class TpCategoryNode
+    {
+        public string name;
+        public string[] subs = new string[0];
+    }
+
+    public static class TpOrigin
+    {
+        public const string Twice = "twice", Store = "store", Other = "other";
+        public static readonly string[] All = { Twice, Store, Other };
+        public static readonly string[] Labels = { "Twice", "Asset Store", "Diğer" };
+        public static string Label(string o) { int i = Array.IndexOf(All, o); return i >= 0 ? Labels[i] : Labels[2]; }
     }
 
     [Serializable]
@@ -35,6 +56,11 @@ namespace TwiceSDK.PackageManager
         public string slug;
         public string name;
         public string category;
+        public string subcategory;
+        public string origin;           // twice / store / other
+        public string storeId;
+        public bool deprecated;
+        public string deprecatedNote;
         public string description;
         public string publisher;
         public string[] tags = new string[0];
@@ -45,8 +71,13 @@ namespace TwiceSDK.PackageManager
         public string updatedAt;
         public int downloads;
         public string latest;
+        public string recommended;      // server-picked default: recommended, else newest not broken
+        public string notes;            // package-level notes (admins)
         public long totalSize;
         public List<TpVersion> versions = new List<TpVersion>();
+
+        /// <summary>The version an install should use when nobody picked one.</summary>
+        public TpVersion Default { get { return Find(recommended) ?? Latest; } }
 
         public TpVersion Find(string v)
         {
@@ -57,6 +88,8 @@ namespace TwiceSDK.PackageManager
 
         public TpVersion Latest { get { return Find(latest) ?? (versions != null && versions.Count > 0 ? versions[0] : null); } }
         public string DisplayName { get { return string.IsNullOrEmpty(name) ? slug : name; } }
+        public bool IsTwice { get { return origin == TpOrigin.Twice; } }
+        public string CategoryLabel { get { return string.IsNullOrEmpty(subcategory) ? (category ?? "") : category + " · " + subcategory; } }
     }
 
     [Serializable]
@@ -74,6 +107,8 @@ namespace TwiceSDK.PackageManager
         public int rev;
         public string user;
         public bool super;
+        public string[] categories = new string[0];
+        public List<TpCategoryNode> taxonomy = new List<TpCategoryNode>();
         public List<TpPackage> packages = new List<TpPackage>();
     }
 
@@ -82,6 +117,8 @@ namespace TwiceSDK.PackageManager
     {
         public TpPackage package;
         public bool canEdit;
+        public string[] moved = new string[0];
+        public string[] skipped = new string[0];
     }
 
     [Serializable]
@@ -98,10 +135,15 @@ namespace TwiceSDK.PackageManager
         public string[] upmDependencies = new string[0];
         public string[] namespaces = new string[0];
         public string category;
+        public string subcategory;
+        public string origin;
+        public string storeId;
+        public bool deprecated;
         public string description;
         public string publisher;
         public string[] tags = new string[0];
         public string assetStoreUrl;
+        public bool overwrite;
     }
 
     [Serializable]
@@ -111,6 +153,9 @@ namespace TwiceSDK.PackageManager
         public long chunkSize;
         public int chunks;
         public string slug;
+        public string matchedFrom;
+        public bool overwrite;
+        public bool newPackage;
     }
 
     [Serializable]
@@ -125,10 +170,24 @@ namespace TwiceSDK.PackageManager
         public string slug;
         public string name;
         public string category;
+        public string subcategory;
+        public string origin;
+        public bool deprecated;
+        public string deprecatedNote;
         public string description;
         public string publisher;
         public string[] tags = new string[0];
         public string assetStoreUrl;
+        public string notes;
+    }
+
+    [Serializable]
+    public class TpVersionUpdateRequest
+    {
+        public string slug;
+        public string version;
+        public string note;
+        public string status;
     }
 
     [Serializable]
@@ -136,6 +195,77 @@ namespace TwiceSDK.PackageManager
     {
         public string slug;
         public string version;
+    }
+
+    [Serializable]
+    public class TpMergeRequest
+    {
+        public string from;
+        public string into;
+    }
+
+    /* ---- identity (rules + AI) ---------------------------------------------- */
+
+    [Serializable]
+    public class TpIdentifyItem
+    {
+        public string title;
+        public string version;
+        public string publisher;
+        public string category;
+        public string storeId;
+        public string filename;
+        public string origin;
+        public string[] namespaces = new string[0];
+    }
+
+    [Serializable]
+    public class TpIdentifyRequest
+    {
+        public List<TpIdentifyItem> items = new List<TpIdentifyItem>();
+        public bool ai;
+    }
+
+    [Serializable]
+    public class TpIdentifyMatch
+    {
+        public string slug;
+        public string by;           // store / key / alias / ai
+        public float confidence;
+    }
+
+    [Serializable]
+    public class TpIdentifyCandidate
+    {
+        public string slug;
+        public string name;
+        public float score;
+    }
+
+    [Serializable]
+    public class TpIdentifyResult
+    {
+        public TpIdentifyMatch match;   // JsonUtility never leaves it null: check match.slug
+        public List<TpIdentifyCandidate> candidates = new List<TpIdentifyCandidate>();
+        public string name;
+        public string category;
+        public string subcategory;
+        public string publisher;
+        public string description;
+        public string[] tags = new string[0];
+        public string origin;
+        public string source;       // rules / cache / ai
+        public string note;
+        public bool deprecated;
+
+        public string MatchSlug { get { return match != null && !string.IsNullOrEmpty(match.slug) ? match.slug : null; } }
+    }
+
+    [Serializable]
+    public class TpIdentifyResponse : TpApiBase
+    {
+        public bool aiAvailable;
+        public List<TpIdentifyResult> items = new List<TpIdentifyResult>();
     }
 
     [Serializable]
@@ -147,7 +277,7 @@ namespace TwiceSDK.PackageManager
     [Serializable]
     public class TpConnectStartResponse : TpApiBase
     {
-        public string code;
+        // the connect code arrives in TpApiBase.code (same JSON key)
         public string pollId;
         public string url;
         public int expiresIn;
@@ -196,6 +326,8 @@ namespace TwiceSDK.PackageManager
         public string fetchedAt;
         public string user;
         public bool super;
+        public string[] categories = new string[0];
+        public List<TpCategoryNode> taxonomy = new List<TpCategoryNode>();
         public List<TpPackage> packages = new List<TpPackage>();
     }
 }
